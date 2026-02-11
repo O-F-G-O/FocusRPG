@@ -6,18 +6,13 @@ import random
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 
-# --- CONFIGURATION SOBRE ---
+# --- CONFIGURATION ---
 st.set_page_config(page_title="Dashboard", page_icon="⚫", layout="wide")
 
-# --- CSS MINIMALISTE (STYLE SUISSE) ---
+# --- CSS MINIMALISTE ---
 st.markdown("""
     <style>
-    /* Fond général plus doux */
-    .stApp {
-        background-color: #FAFAFA;
-    }
-    
-    /* Style des boutons : Fin et élégant (Outline) */
+    .stApp { background-color: #FAFAFA; }
     .stButton>button {
         width: 100%;
         border: 1px solid #444;
@@ -25,176 +20,149 @@ st.markdown("""
         background-color: white;
         color: #333;
         font-weight: 500;
-        transition: all 0.2s;
     }
-    .stButton>button:hover {
-        background-color: #333;
-        color: white;
-        border-color: #333;
-    }
-
-    /* Le Timer style "Horloge Digitale" */
+    .stButton>button:hover { background-color: #333; color: white; }
     .digital-clock {
         font-family: 'Courier New', Courier, monospace;
         font-size: 80px;
         font-weight: bold;
         color: #333;
         text-align: center;
-        letter-spacing: -2px;
-        margin-top: 10px;
-        margin-bottom: 10px;
-    }
-
-    /* Titres sobres */
-    h1, h2, h3 {
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        font-weight: 600;
-        letter-spacing: -0.5px;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- MOTEUR (IDENTIQUE V4) ---
-def get_worksheet():
+# --- MOTEUR DE CONNEXION ---
+def get_db():
     secrets = st.secrets["connections"]["gsheets"]
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_info(secrets, scopes=scopes)
     client = gspread.authorize(creds)
-    sheet_url = secrets["spreadsheet"]
-    sh = client.open_by_url(sheet_url)
-    return sh.worksheet("Data")
+    return client.open_by_url(secrets["spreadsheet"])
 
-def save_action(xp_amount, type_stat, comment=""):
+# --- FONCTIONS TACHES (PERSISTANTES) ---
+def load_tasks():
     try:
-        ws = get_worksheet()
-        ws.append_row([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), type_stat, xp_amount, comment])
-        st.toast(f"Sauvegardé. (+{xp_amount})")
-    except Exception as e:
-        st.error(f"Erreur : {e}")
+        sh = get_db()
+        ws = sh.worksheet("Tasks")
+        # Récupère tout sauf l'entête
+        records = ws.col_values(1)[1:]
+        return records
+    except:
+        return []
 
-def load_data():
+def add_task_to_db(task_name):
     try:
-        ws = get_worksheet()
+        sh = get_db()
+        ws = sh.worksheet("Tasks")
+        ws.append_row([task_name])
+    except:
+        st.error("Erreur d'ajout")
+
+def delete_task_from_db(task_name):
+    try:
+        sh = get_db()
+        ws = sh.worksheet("Tasks")
+        cell = ws.find(task_name)
+        if cell:
+            ws.delete_rows(cell.row)
+    except:
+        pass
+
+# --- FONCTIONS XP ---
+def save_xp(amount, type_stat, comment=""):
+    try:
+        sh = get_db()
+        ws = sh.worksheet("Data")
+        ws.append_row([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), type_stat, amount, comment])
+        st.toast(f"XP Sauvegardé (+{amount})")
+    except:
+        st.error("Erreur XP")
+
+def load_xp_total():
+    try:
+        sh = get_db()
+        ws = sh.worksheet("Data")
         data = ws.get_all_records()
         df = pd.DataFrame(data)
-        if df.empty: 
-            return pd.DataFrame(columns=["Date", "Type", "XP", "Commentaire"])
-        return df
+        if df.empty: return 0, pd.DataFrame()
+        df["XP"] = pd.to_numeric(df["XP"], errors='coerce').fillna(0)
+        return int(df["XP"].sum()), df
     except:
-        return pd.DataFrame(columns=["Date", "Type", "XP", "Commentaire"])
+        return 0, pd.DataFrame()
 
-# --- DATA SPORT (TEXTE SIMPLE) ---
-SEANCES_GYM = {
-    "A": "**SEANCE A (Barres)**\n\nSquat (3x8)\nDéveloppé Couché (3x10)\nRowing Barre (3x10)\nPresse cuisses (3x12)\nGainage (3x1min)",
-    "B": "**SEANCE B (Haltères)**\n\nFentes (3x12)\nDéveloppé Militaire (3x10)\nSoulevé de terre (3x10)\nBiceps/Triceps (3x12)\nAbdos (3x20)",
-    "C": "**SEANCE C (Machines)**\n\nPresse (4x10)\nTirage Vertical (4x10)\nChest Press (4x10)\nLeg Extension (3x15)\nElliptique (10min)",
-    "D": "**SEANCE D (Hybride)**\n\nGoblet Squat (3x12)\nPompes (3xMax)\nTirage Câble (3x12)\nKettlebell Swing (3x15)\nPlanche (3x45s)"
-}
-
-# --- INIT SESSION ---
-if 'todos' not in st.session_state: st.session_state.todos = ["Vérifier Agenda", "Répondre Mails"]
-
-# --- CALCUL NIVEAU (DISCRET) ---
-df = load_data()
-if not df.empty and "XP" in df.columns:
-    df["XP"] = pd.to_numeric(df["XP"], errors='coerce').fillna(0)
-    total_xp = df["XP"].sum()
-else:
-    total_xp = 0
-niveau = 1 + (int(total_xp) // 100)
+# --- CHARGEMENT ---
+total_xp, df_xp = load_xp_total()
+niveau = 1 + (total_xp // 100)
+active_tasks = load_tasks()
 
 # --- LAYOUT ---
-col_sidebar, col_main = st.columns([1, 2.5], gap="large")
+col_side, col_main = st.columns([1, 2.5], gap="large")
 
-# === COLONNE GAUCHE : TO-DO LIST (STYLE NOTEPAD) ===
-with col_sidebar:
-    st.caption(f"NIVEAU {niveau} • {int(total_xp)} XP")
-    st.progress((int(total_xp) % 100) / 100)
+with col_side:
+    st.caption(f"NIVEAU {niveau} • {total_xp} XP")
+    st.progress((total_xp % 100) / 100)
     st.write("---")
     
     st.subheader("TACHES")
     
-    # Input discret
-    new_task = st.text_input("Nouvelle entrée...", label_visibility="collapsed")
+    # Antidote autocomplete : on change la clé à chaque fois
+    new_task = st.text_input("Saisir...", key=f"input_{len(active_tasks)}", label_visibility="collapsed")
     if st.button("Ajouter"):
-        if new_task:
-            st.session_state.todos.append(new_task)
+        if new_task and new_task not in active_tasks:
+            add_task_to_db(new_task)
             st.rerun()
     
-    st.write("") # Espace
-    
-    # Liste épurée
-    if not st.session_state.todos:
-        st.caption("Aucune tâche en cours.")
-    
-    for i, task in enumerate(st.session_state.todos):
-        c1, c2 = st.columns([4, 1])
-        with c1:
-            st.markdown(f"{task}")
-        with c2:
-            if st.button("✓", key=f"done_{i}"):
-                save_action(10, "Gestion", f"Tâche : {task}")
-                st.session_state.todos.pop(i)
+    st.write("")
+    for i, task in enumerate(active_tasks):
+        c1, c2, c3 = st.columns([0.6, 0.2, 0.2])
+        with c1: st.markdown(f"{task}")
+        with c2: # Bouton Valider
+            if st.button("✓", key=f"v_{i}"):
+                save_xp(10, "Gestion", task)
+                delete_task_from_db(task)
+                st.rerun()
+        with c3: # Bouton Poubelle (Supprimer sans XP)
+            if st.button("×", key=f"d_{i}"):
+                delete_task_from_db(task)
                 st.rerun()
 
-# === COLONNE DROITE : ACTION CENTER ===
 with col_main:
-    # Navigation minimaliste par "Radio" au lieu de gros onglets
-    mode = st.radio("NAVIGATION", ["SPORT", "FOCUS / ADMIN"], horizontal=True, label_visibility="collapsed")
+    mode = st.radio("NAV", ["SPORT", "ADMIN"], horizontal=True, label_visibility="collapsed")
     st.write("---")
 
     if mode == "SPORT":
         c1, c2 = st.columns(2)
-        
-        # BLOC 1 : MAISON
         with c1:
-            st.markdown("##### HOME • 20 MIN")
-            st.caption("Timer focus sans distraction.")
-            
-            if st.button("LANCER LE TIMER"):
-                timer_spot = st.empty()
-                # Décompte
-                for seconds in range(20 * 60, -1, -1):
-                    mins, secs = divmod(seconds, 60)
-                    timer_spot.markdown(f'<div class="digital-clock">{mins:02d}:{secs:02d}</div>', unsafe_allow_html=True)
+            st.markdown("##### MAISON (20 MIN)")
+            if st.button("LANCER TIMER"):
+                spot = st.empty()
+                for s in range(20*60, -1, -1):
+                    m, sec = divmod(s, 60)
+                    spot.markdown(f'<div class="digital-clock">{m:02d}:{sec:02d}</div>', unsafe_allow_html=True)
                     time.sleep(1)
-                st.success("Terminé.")
-            
-            st.write("")
-            if st.button("Valider Séance Maison"):
-                save_action(20, "Force", "Maison 20min")
+                st.success("Fini")
+            if st.button("Valider Maison (+20)"):
+                save_xp(20, "Force", "Maison")
                 st.rerun()
-
-        # BLOC 2 : SALLE
         with c2:
-            st.markdown("##### GYM • 1H")
-            st.caption("Programme aléatoire.")
-            
-            if st.button("Générer Programme"):
-                seance_id = random.choice(list(SEANCES_GYM.keys()))
-                st.session_state.current_workout = SEANCES_GYM[seance_id]
-            
-            if 'current_workout' in st.session_state:
-                st.info(st.session_state.current_workout)
-                if st.button("Valider Séance Salle"):
-                    save_action(50, "Force", "Salle Full Body")
-                    del st.session_state.current_workout
+            st.markdown("##### SALLE (1H)")
+            if st.button("Programme"):
+                st.session_state.workout = "Squat / DC / Rowing / Presse / Gainage"
+            if 'workout' in st.session_state:
+                st.info(st.session_state.workout)
+                if st.button("Valider Salle (+50)"):
+                    save_xp(50, "Force", "Salle")
+                    del st.session_state.workout
                     st.rerun()
-
-    elif mode == "FOCUS / ADMIN":
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("##### ADMIN")
-            if st.button("Rangement / Agenda (+5)"):
-                save_action(5, "Gestion", "Admin rapide")
+    
+    else: # Mode ADMIN
+        ca, cb = st.columns(2)
+        with ca:
+            if st.button("Agenda / Mail (+5)"):
+                save_xp(5, "Gestion", "Admin")
                 st.rerun()
-                
-        with c2:
-            st.markdown("##### INTELLECT")
+        with cb:
             if st.button("Session Anki (+15)"):
-                save_action(15, "Intellect", "Anki")
+                save_xp(15, "Intellect", "Anki")
                 st.rerun()
-        
-        st.write("---")
-        st.caption("Dernières entrées :")
-        st.dataframe(df.tail(3)[["Date", "Type", "XP"]].iloc[::-1], use_container_width=True, hide_index=True)
