@@ -1,57 +1,85 @@
 import streamlit as st
 import pandas as pd
-from streamlit_gsheets import GSheetsConnection
+import gspread
+from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Mon RPG Vie", page_icon="🎮", layout="centered")
 
-# --- CONNEXION GOOGLE SHEETS ---
-conn = st.connection("gsheets", type=GSheetsConnection)
+# --- CONNEXION DIRECTE (MÉTHODE ROBUSTE) ---
+# On contourne le wrapper Streamlit pour parler directement à Google
+def get_worksheet():
+    # 1. On récupère tes secrets
+    secrets = st.secrets["connections"]["gsheets"]
+    
+    # 2. On s'identifie
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds = Credentials.from_service_account_info(secrets, scopes=scopes)
+    client = gspread.authorize(creds)
+    
+    # 3. On ouvre la feuille
+    sheet_url = secrets["spreadsheet"]
+    sh = client.open_by_url(sheet_url)
+    return sh.worksheet("Data")
+
+# Fonction pour sauvegarder (Ajoute juste une ligne, ne casse pas tout)
+def save_action(xp_amount, type_stat, comment=""):
+    try:
+        ws = get_worksheet()
+        # On ajoute la ligne à la fin
+        ws.append_row([
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
+            type_stat, 
+            xp_amount, 
+            comment
+        ])
+        st.toast(f"Sauvegardé ! (+{xp_amount} XP)", icon="💾")
+    except Exception as e:
+        st.error(f"Erreur de sauvegarde : {e}")
 
 # Fonction pour charger les données
 def load_data():
     try:
-        # On lit la feuille. ttl=0 force la mise à jour immédiate.
-        df = conn.read(worksheet="Data", ttl=0)
+        ws = get_worksheet()
+        # On lit tout le contenu
+        data = ws.get_all_records()
+        df = pd.DataFrame(data)
+        # Si le tableau est vide mais existe, on renvoie un vide propre
+        if df.empty:
+            return pd.DataFrame(columns=["Date", "Type", "XP", "Commentaire"])
         return df
-    except:
+    except Exception:
+        # Si erreur (ex: première fois), on renvoie vide
         return pd.DataFrame(columns=["Date", "Type", "XP", "Commentaire"])
 
-# Fonction pour sauvegarder une action
-def save_action(xp_amount, type_stat, comment=""):
-    df = load_data()
-    new_row = pd.DataFrame([{
-        "Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "Type": type_stat,
-        "XP": xp_amount,
-        "Commentaire": comment
-    }])
-    updated_df = pd.concat([df, new_row], ignore_index=True)
-    conn.update(worksheet="Data", data=updated_df)
-    st.toast(f"Sauvegardé ! (+{xp_amount} XP)", icon="💾")
-
 # --- CALCUL DU NIVEAU ---
-try:
-    df = load_data()
-    if not df.empty:
-        total_xp = df["XP"].sum()
-        xp_intellect = df[df["Type"] == "Intellect"]["XP"].sum()
-        xp_force = df[df["Type"] == "Force"]["XP"].sum()
-        xp_gestion = df[df["Type"] == "Gestion"]["XP"].sum()
-    else:
-        total_xp, xp_intellect, xp_force, xp_gestion = 0, 0, 0, 0
-except:
-    st.error("Connexion à la base de données en cours... (ou erreur de config)")
+df = load_data()
+if not df.empty and "XP" in df.columns:
+    # On s'assure que XP est bien un nombre
+    df["XP"] = pd.to_numeric(df["XP"], errors='coerce').fillna(0)
+    
+    total_xp = df["XP"].sum()
+    xp_intellect = df[df["Type"] == "Intellect"]["XP"].sum()
+    xp_force = df[df["Type"] == "Force"]["XP"].sum()
+    xp_gestion = df[df["Type"] == "Gestion"]["XP"].sum()
+else:
     total_xp, xp_intellect, xp_force, xp_gestion = 0, 0, 0, 0
 
 niveau = 1 + (int(total_xp) // 100)
 xp_restant = 100 - (int(total_xp) % 100)
 
 # --- INTERFACE ---
-st.title(f"Héros Niveau {niveau} 🛡️")
-st.progress((int(total_xp) % 100) / 100)
-st.caption(f"XP Total : {int(total_xp)} | Prochain niveau : {xp_restant} XP")
+col_av, col_txt = st.columns([1, 4])
+with col_av:
+    st.image("https://api.dicebear.com/7.x/notionists/svg?seed=Felix", width=80)
+with col_txt:
+    st.title(f"Héros Niveau {niveau}")
+    st.progress((int(total_xp) % 100) / 100)
+    st.caption(f"XP Total : {int(total_xp)} | Prochain niveau : {xp_restant} XP")
 
 # --- QUÊTES ---
 tab1, tab2, tab3 = st.tabs(["⚡ Action", "📜 Historique", "📊 Stats"])
@@ -75,16 +103,22 @@ with tab1:
             st.rerun()
 
     st.divider()
-    task = st.text_input("Quête perso terminée ?")
-    if st.button("Valider (+15 XP)"):
-        if task:
-            save_action(15, "Gestion", task)
-            st.rerun()
+    with st.expander("Quête Personnalisée"):
+        task = st.text_input("Description de la tâche :")
+        xp_val = st.slider("Valeur XP", 5, 50, 10)
+        if st.button("Valider la quête"):
+            if task:
+                save_action(xp_val, "Gestion", task)
+                st.rerun()
 
 with tab2:
     st.subheader("Dernières actions")
     if not df.empty:
-        st.dataframe(df.tail(5).sort_values("Date", ascending=False), use_container_width=True)
+        # On affiche les 5 dernières lignes (inversées pour voir les récentes en haut)
+        st.dataframe(df.tail(5).iloc[::-1], use_container_width=True)
 
 with tab3:
-    st.bar_chart({"Intellect": xp_intellect, "Force": xp_force, "Gestion": xp_gestion})
+    if total_xp > 0:
+        st.bar_chart({"Intellect": xp_intellect, "Force": xp_force, "Gestion": xp_gestion})
+    else:
+        st.info("Fais une première action pour voir tes stats !")
