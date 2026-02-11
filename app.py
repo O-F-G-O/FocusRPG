@@ -48,6 +48,11 @@ st.markdown("""
         color: #333;
         margin: 10px 0;
     }
+    /* Style pour l'image d'évolution */
+    .stImage {
+        border-bottom: 3px solid #333;
+        margin-bottom: 20px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -91,7 +96,7 @@ def load_xp_total():
         return int(pd.to_numeric(df["XP"], errors='coerce').sum())
     except: return 0
 
-# --- DATA SPORT (8 PROGRAMMES OPTIMISÉS) ---
+# --- DATA SPORT ---
 GYM_PROGRAMS = {
     "1. PUSH (PECS/EPAULES)": "BANC HORIZONTAL : 4 x 8 (Repos: 2min)\nDEVELOPPÉ MILITAIRE : 3 x 10 (Repos: 90s)\nECARTÉS HALTÈRES : 3 x 12 (Repos: 60s)\nDIPIES : 3 x MAX (Repos: 90s)\nEXTENSIONS TRICEPS : 3 x 12 (Repos: 60s)",
     "2. PULL (DOS/BICEPS)": "SOULEVÉ DE TERRE : 3 x 5 (Repos: 3min)\nTIRAGE VERTICAL : 4 x 10 (Repos: 90s)\nROWING HALTÈRE : 3 x 12 (Repos: 90s)\nFACEPULL : 3 x 15 (Repos: 60s)\nCURL BICEPS : 3 x 12 (Repos: 60s)",
@@ -108,11 +113,24 @@ total_xp = load_xp_total()
 level = 1 + (total_xp // 100)
 progress = (total_xp % 100) / 100
 active_tasks = load_tasks()
+xp_needed = 100 - (total_xp % 100)
 
-# --- TOP BAR (XP SELECTA) ---
-st.markdown(f"#### HEROS : SELECTA | NIVEAU {level}")
-st.progress(progress)
-st.caption(f"{total_xp} XP TOTAL • ENCORE {100 - (total_xp % 100)} XP AVANT LE PROCHAIN NIVEAU")
+# --- TOP BAR (EVOLUTION CHART & XP) ---
+# Affichage de l'image d'évolution en pleine largeur
+try:
+    st.image("image_12.png", use_column_width=True)
+except:
+    st.warning("Image 'image_12.png' introuvable. Assurez-vous de l'avoir uploadée sur GitHub.")
+
+# Barre d'XP et infos du niveau actuel
+col_xp1, col_xp2 = st.columns([3, 1])
+with col_xp1:
+     st.markdown(f"#### NIVEAU ACTUEL : {level}")
+     st.progress(progress)
+     st.caption(f"{total_xp} XP TOTAL ACQUIS")
+with col_xp2:
+     st.metric(label="PROCHAIN NIVEAU DANS", value=f"{xp_needed} XP")
+
 st.write("---")
 
 # --- LAYOUT DASHBOARD ---
@@ -128,7 +146,6 @@ with col_left:
     
     st.write("")
     for i, t in enumerate(active_tasks):
-        # Ratios : Texte (70%), Valider (20%), Supprimer (10%)
         c1, c2, c3 = st.columns([0.7, 0.2, 0.1])
         with c1: st.text(t)
         with c2: 
