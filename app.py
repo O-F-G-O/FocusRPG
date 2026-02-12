@@ -3,26 +3,49 @@ import pandas as pd
 import gspread
 import time
 import random
+import streamlit.components.v1 as components
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Selecta RPG", page_icon="🛡️", layout="wide")
 
-# --- CSS (STYLE V33 - CLEAN & FORMS) ---
+# --- SCRIPT ANTI-AUTOCOMPLETE (HACK) ---
+# Ce bout de code force le navigateur à ne pas proposer l'historique sur les champs texte
+components.html(
+    """
+    <script>
+    const inputs = window.parent.document.querySelectorAll('input[type="text"]');
+    inputs.forEach(input => {
+        input.setAttribute('autocomplete', 'off');
+        input.setAttribute('name', 'hidden_' + Math.random()); // Embrouille le navigateur
+    });
+    </script>
+    """,
+    height=0,
+)
+
+# --- CSS (CORRECTIFS V35 - PADDING & LOOK) ---
 st.markdown("""
     <style>
     /* Fond global */
     .stApp { background-color: #f4f6f9; color: #333; }
     
-    /* FIX TOP PADDING */
-    .block-container { padding-top: 1.2rem !important; }
+    /* FIX TOP : On réduit le padding au minimum vital */
+    .block-container { 
+        padding-top: 1rem !important; 
+        padding-bottom: 5rem !important;
+    }
 
     /* === HEADER HUD === */
     .hud-box {
-        background-color: white; padding: 20px; border-radius: 12px;
-        border-bottom: 3px solid #333; box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-        margin-bottom: 30px; margin-top: -0.5rem;
+        background-color: white; 
+        padding: 20px; 
+        border-radius: 12px;
+        border-bottom: 3px solid #333; 
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        margin-bottom: 30px; 
+        margin-top: -3rem; /* On tire vers le haut pour masquer le blanc */
     }
 
     /* === BARRES === */
@@ -33,13 +56,12 @@ st.markdown("""
     .mana-fill { background: linear-gradient(90deg, #0056b3, #007bff); }
     .chaos-fill { background: linear-gradient(90deg, #800000, #a71d2a); }
 
-    /* === UI & BOUTONS STANDARDS + FORMS === */
+    /* === UI === */
     .section-header {
         font-size: 1.1em; font-weight: 800; text-transform: uppercase; color: #444;
         border-bottom: 2px solid #ddd; padding-bottom: 5px; margin-bottom: 15px; margin-top: 20px;
     }
     
-    /* Style uniforme pour stButton et stFormSubmitButton */
     .stButton>button, .stFormSubmitButton>button {
         width: 100%; min-height: 40px; border: 1px solid #bbb; border-radius: 6px;
         background-color: white; color: #333; font-weight: 600; text-transform: uppercase; font-size: 0.85em; transition: all 0.2s;
@@ -64,20 +86,17 @@ st.markdown("""
     }
     .sober-marker + div > button:hover { color: #333 !important; border-color: #888 !important; }
 
-    /* Boutons Urgents (Rouge) */
+    /* Boutons Urgents/Gold */
     @keyframes pulse-red { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
     .urgent-marker + div > button {
         background: linear-gradient(135deg, #d9534f, #c9302c) !important; color: white !important; border: none !important;
         font-weight: 900 !important; letter-spacing: 1px !important; font-size: 1em !important;
         animation: pulse-red 1.5s infinite !important; height: 55px !important;
     }
-    /* Boutons Warning (Orange) */
     .warning-marker + div > button {
         background: linear-gradient(135deg, #f0ad4e, #ec971f) !important; color: white !important; border: none !important;
         font-weight: 800 !important; height: 48px !important;
     }
-
-    /* Bannière Payé (Or) */
     .gold-banner {
         background: linear-gradient(135deg, #bf953f, #fcf6ba, #b38728, #fbf5b7);
         color: #5c4004; padding: 15px; text-align: center; border-radius: 8px;
@@ -157,7 +176,6 @@ def get_stats():
     try:
         df = pd.DataFrame(get_db().worksheet("Data").get_all_records())
         if df.empty: return 0, 100, 0, False, False
-        
         xp = int(pd.to_numeric(df["XP"], errors='coerce').sum())
         
         anki_logs = df[df['Commentaire'].str.contains("Combat", case=False, na=False)]
@@ -176,11 +194,10 @@ def get_stats():
             
         is_rent_paid = check_paid(df, "Loyer")
         is_salt_paid = check_paid(df, "Facture: Salt")
-        
         return xp, mana, chaos, is_rent_paid, is_salt_paid
     except: return 0, 50, 50, False, False
 
-# --- SPORT DATA ---
+# --- SPORT ---
 FULL_BODY_PROGRAMS = {
     "FB1. STRENGTH": "SQUAT 3x5\nBENCH 3x5\nROWING 3x6\nRDL 3x8\nPLANK 3x1min",
     "FB2. HYPERTROPHY": "PRESSE 3x12\nTIRAGE 3x12\nCHEST PRESS 3x12\nLEG CURL 3x15\nELEVATIONS 3x15",
@@ -189,7 +206,7 @@ FULL_BODY_PROGRAMS = {
     "FB7. CIRCUIT": "THRUSTERS x10\nRENEGADE ROW x8\nCLIMBERS x20\nPUSHUPS xMAX\nJUMPS x15"
 }
 
-# --- CALCULS INITIAUX ---
+# --- STATS ---
 total_xp, current_mana, current_chaos, rent_paid_status, salt_paid_status = get_stats()
 niveau = 1 + (total_xp // 100)
 progress_pct = total_xp % 100
@@ -197,11 +214,11 @@ xp_needed = 100 - progress_pct
 current_month_name = MOIS_FR[datetime.now().month]
 
 # ==============================================================================
-# HUD HEADER (CORRECTIF : 2 COLONNES HAUT, 3 COLONNES BAS)
+# HUD HEADER
 # ==============================================================================
 st.markdown('<div class="hud-box">', unsafe_allow_html=True)
 
-# Ligne 1 : Avatar et Titre (2 colonnes seulement !)
+# Ligne 1 : 2 colonnes
 c_av, c_main = st.columns([0.1, 0.9])
 with c_av: st.image("avatar.png", width=80)
 with c_main:
@@ -210,7 +227,7 @@ with c_main:
 
 st.write("") 
 
-# Ligne 2 : Les Barres (3 colonnes)
+# Ligne 2 : 3 colonnes
 c_bar1, c_bar2, c_bar3 = st.columns(3, gap="medium")
 with c_bar1: draw_bar("EXPÉRIENCE", progress_pct, "xp-fill")
 with c_bar2: draw_bar("MÉMOIRE (MANA)", current_mana, "mana-fill")
@@ -225,14 +242,12 @@ col_left, col_right = st.columns([1, 1.2], gap="large")
 
 # === GAUCHE ===
 with col_left:
-    # 1. QUÊTES (FORMULAIRE POUR NETTOYER L'INPUT)
+    # 1. QUÊTES
     st.markdown('<div class="section-header">📌 QUÊTES DU JOUR</div>', unsafe_allow_html=True)
     with st.form("task_form", clear_on_submit=True):
         new_t = st.text_input("Ajouter une tâche...", label_visibility="collapsed")
-        submitted = st.form_submit_button("AJOUTER TÂCHE")
-        if submitted and new_t:
-            add_task(new_t, 1)
-            st.rerun()
+        if st.form_submit_button("AJOUTER TÂCHE") and new_t:
+            add_task(new_t, 1); st.rerun()
     
     tasks = load_tasks(1) 
     for i, t in enumerate(tasks):
@@ -245,10 +260,10 @@ with col_left:
     
     st.write("")
     
-    # 2. GESTION DU ROYAUME
+    # 2. GESTION
     st.markdown('<div class="section-header">🛡️ GESTION DU ROYAUME</div>', unsafe_allow_html=True)
 
-    # A. LOYER
+    # LOYER
     st.markdown("**LOYER**")
     if rent_paid_status:
         st.markdown(f'<div class="gold-banner">✨ LOYER {current_month_name} RÉGLÉ ✨</div>', unsafe_allow_html=True)
@@ -267,7 +282,7 @@ with col_left:
 
     st.write("")
 
-    # B. SALT
+    # SALT
     st.markdown("**SALT (INTERNET/TV)**")
     if salt_paid_status:
         st.markdown(f'<div class="gold-banner">✨ SALT {current_month_name} RÉGLÉ ✨</div>', unsafe_allow_html=True)
@@ -284,10 +299,9 @@ with col_left:
         else:
             if st.button(f"PAYER SALT {current_month_name} (EN ATTENTE)", key="salt_btn"): save_xp(25, "Gestion", "Facture: Salt"); st.rerun()
 
-
     st.write("")
 
-    # C. COMMUNICATIONS
+    # COMMUNICATIONS
     st.markdown("**COMMUNICATIONS**")
     c_mail1, c_mail2, c_mail3 = st.columns(3)
     with c_mail1:
@@ -305,7 +319,7 @@ with col_left:
 
     st.write("")
 
-    # D. AUTRES FACTURES (FORMULAIRE)
+    # AUTRES FACTURES
     st.markdown("**AUTRES FACTURES**")
     with st.form("bills_form", clear_on_submit=True):
         c_fac1, c_fac2 = st.columns([0.7, 0.3])
@@ -329,7 +343,6 @@ with col_right:
                     if l.strip(): add_task(l.strip(), 2)
                 st.rerun()
         
-        # Formulaire cours
         with st.form("anki_form", clear_on_submit=True):
             new_anki = st.text_input("Ajouter cours...", label_visibility="collapsed")
             if st.form_submit_button("AJOUTER") and new_anki:
