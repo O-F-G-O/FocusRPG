@@ -9,14 +9,14 @@ from datetime import datetime
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Selecta RPG", page_icon="🛡️", layout="wide")
 
-# --- CSS (CORRECTIFS V30 - ALIGNEMENT FINAL & BOUTONS) ---
+# --- CSS (CORRECTIFS V31 - ALIGNEMENT & PADDING) ---
 st.markdown("""
     <style>
     /* Fond global */
     .stApp { background-color: #f4f6f9; color: #333; }
     
-    /* RESTAURATION DU PADDING HAUT (Pour ne pas couper le HUD) */
-    .block-container { padding-top: 2rem !important; }
+    /* FIX TOP : Padding ajusté pour éviter le blanc ET ne pas couper */
+    .block-container { padding-top: 1.2rem !important; }
 
     /* === HEADER HUD STYLISÉ === */
     .hud-box {
@@ -26,6 +26,7 @@ st.markdown("""
         border-bottom: 3px solid #333;
         box-shadow: 0 4px 15px rgba(0,0,0,0.08);
         margin-bottom: 30px;
+        margin-top: -0.5rem; /* Remonte légèrement pour combler le vide */
     }
 
     /* === BARRES PROGRESSION CUSTOM === */
@@ -35,7 +36,7 @@ st.markdown("""
     }
     .bar-container {
         background-color: #e9ecef; border-radius: 8px;
-        width: 100%; height: 16px; /* Hauteur fine et uniforme */
+        width: 100%; height: 16px; 
         box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); overflow: hidden;
     }
     .bar-fill {
@@ -70,18 +71,18 @@ st.markdown("""
 
     /* === BOUTONS CUSTOM SPÉCIFIQUES === */
     
-    /* 1. BOUTONS COMMUNICATIONS (Taille uniforme forcée) */
+    /* 1. BOUTONS COMMUNICATIONS (Taille uniforme) */
     .comm-btn > div > div > button {
-        height: 45px !important; /* Hauteur fixe pour les 3 */
+        height: 45px !important; 
         font-size: 0.8em !important;
     }
 
-    /* 2. BOUTON ANNULER SOBRE (Petit, gris, minuscule) */
+    /* 2. BOUTON ANNULER SOBRE */
     .sober-marker + div > button {
          background-color: transparent !important; color: #888 !important;
          border: 1px solid #ccc !important; font-size: 0.7em !important; 
          height: 28px !important; min-height: 28px !important;
-         text-transform: none !important; /* Pas de majuscules */
+         text-transform: none !important;
          padding: 0px !important; width: auto !important; padding-left: 10px !important; padding-right: 10px !important;
          margin-top: 5px;
     }
@@ -229,7 +230,7 @@ xp_needed = 100 - progress_pct
 current_month_name = MOIS_FR[datetime.now().month]
 
 # ==============================================================================
-# HUD HEADER (NOUVELLE STRUCTURE ALIGNÉE)
+# HUD HEADER (ALIGNÉ & SANS BLANC)
 # ==============================================================================
 st.markdown('<div class="hud-box">', unsafe_allow_html=True)
 
@@ -241,13 +242,13 @@ with c_head2:
     st.markdown(f"<h2 style='margin:0; border:none;'>NIVEAU {niveau} | SELECTA</h2>", unsafe_allow_html=True)
     st.caption(f"Progression vers le niveau {niveau+1}")
 
-st.write("") # Petit espace
+st.write("") 
 
-# Ligne 2 : Les 3 barres alignées parfaitement
+# Ligne 2 : Les 3 barres (ORDRE CORRIGÉ POUR ALIGNEMENT)
 c_bar1, c_bar2, c_bar3 = st.columns(3, gap="medium")
 with c_bar1:
     draw_bar("EXPÉRIENCE", progress_pct, "xp-fill")
-    st.caption(f"{xp_needed} XP requis")
+    st.caption(f"{xp_needed} XP requis") # Caption EN DESSOUS comme les autres
 with c_bar2:
     draw_bar("MÉMOIRE (MANA)", current_mana, "mana-fill")
     st.caption("État de vos connaissances")
@@ -292,7 +293,7 @@ with col_left:
     st.markdown("**LOYER**")
     if rent_paid_status:
         st.markdown(f'<div class="rent-gold-banner">✨ LOYER {current_month_name} RÉGLÉ ✨</div>', unsafe_allow_html=True)
-        # Marqueur pour bouton sobre et petit
+        # Marqueur pour bouton sobre
         st.markdown('<span class="sober-marker"></span>', unsafe_allow_html=True)
         if st.button("↺ Annuler", key="undo_rent"):
              undo_rent_payment(); st.rerun()
@@ -312,7 +313,7 @@ with col_left:
 
     st.write("")
 
-    # B. COMMUNICATIONS (BOUTONS UNIFORMES VIA CLASSE CSS 'comm-btn')
+    # B. COMMUNICATIONS
     st.markdown("**COMMUNICATIONS**")
     c_mail1, c_mail2, c_mail3 = st.columns(3)
     with c_mail1:
