@@ -9,7 +9,7 @@ from datetime import datetime
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Selecta RPG", page_icon="🛡️", layout="wide")
 
-# --- CSS (V32 - STYLE INCHANGÉ) ---
+# --- CSS (CORRECTIFS V33 - FORMS & BOUTONS) ---
 st.markdown("""
     <style>
     /* Fond global */
@@ -33,16 +33,21 @@ st.markdown("""
     .mana-fill { background: linear-gradient(90deg, #0056b3, #007bff); }
     .chaos-fill { background: linear-gradient(90deg, #800000, #a71d2a); }
 
-    /* === UI === */
+    /* === UI & BOUTONS STANDARDS + FORMS === */
     .section-header {
         font-size: 1.1em; font-weight: 800; text-transform: uppercase; color: #444;
         border-bottom: 2px solid #ddd; padding-bottom: 5px; margin-bottom: 15px; margin-top: 20px;
     }
-    .stButton>button {
+    
+    /* On applique le style à stButton ET stFormSubmitButton pour l'uniformité */
+    .stButton>button, .stFormSubmitButton>button {
         width: 100%; min-height: 40px; border: 1px solid #bbb; border-radius: 6px;
         background-color: white; color: #333; font-weight: 600; text-transform: uppercase; font-size: 0.85em; transition: all 0.2s;
     }
-    .stButton>button:hover { border-color: #333; background-color: #333; color: white; transform: translateY(-1px); }
+    .stButton>button:hover, .stFormSubmitButton>button:hover { 
+        border-color: #333; background-color: #333; color: white; transform: translateY(-1px); 
+    }
+    
     .timer-box {
         font-family: 'Courier New', monospace; font-size: 2.2em; font-weight: bold;
         color: #d9534f; text-align: center; background-color: #fff; border: 2px solid #d9534f; border-radius: 8px; padding: 15px; margin: 10px 0;
@@ -72,7 +77,7 @@ st.markdown("""
         font-weight: 800 !important; height: 48px !important;
     }
 
-    /* Bannière Payé (Or) - Utilisée pour Loyer ET Salt */
+    /* Bannière Payé (Or) */
     .gold-banner {
         background: linear-gradient(135deg, #bf953f, #fcf6ba, #b38728, #fbf5b7);
         color: #5c4004; padding: 15px; text-align: center; border-radius: 8px;
@@ -128,7 +133,6 @@ def save_xp(amt, type_s, cmt=""):
         st.toast(f"+{amt} XP")
     except: st.error("Erreur Save")
 
-# --- UNDO FUNCTIONS ---
 def undo_payment(keyword):
     try:
         ws = get_db().worksheet("Data")
@@ -142,7 +146,6 @@ def undo_payment(keyword):
     except: pass
     return False
 
-# --- CHECK FUNCTIONS ---
 def check_paid(df, keyword):
     try:
         current_month = datetime.now().strftime("%Y-%m")
@@ -216,11 +219,15 @@ col_left, col_right = st.columns([1, 1.2], gap="large")
 
 # === GAUCHE ===
 with col_left:
-    # 1. QUÊTES
+    # 1. QUÊTES (FORMULAIRE POUR NETTOYER L'INPUT)
     st.markdown('<div class="section-header">📌 QUÊTES DU JOUR</div>', unsafe_allow_html=True)
-    new_t = st.text_input("Ajouter une tâche...", label_visibility="collapsed")
-    if st.button("AJOUTER TÂCHE", key="add_t"):
-        if new_t: add_task(new_t, 1); st.rerun()
+    with st.form("task_form", clear_on_submit=True):
+        new_t = st.text_input("Ajouter une tâche...", label_visibility="collapsed")
+        # Le bouton de submit aura le même style que les autres grâce au CSS
+        submitted = st.form_submit_button("AJOUTER TÂCHE")
+        if submitted and new_t:
+            add_task(new_t, 1)
+            st.rerun()
     
     tasks = load_tasks(1) 
     for i, t in enumerate(tasks):
@@ -255,7 +262,7 @@ with col_left:
 
     st.write("")
 
-    # B. SALT (NEW !)
+    # B. SALT
     st.markdown("**SALT (INTERNET/TV)**")
     if salt_paid_status:
         st.markdown(f'<div class="gold-banner">✨ SALT {current_month_name} RÉGLÉ ✨</div>', unsafe_allow_html=True)
@@ -271,7 +278,6 @@ with col_left:
             if st.button(f"RAPPEL : SALT {current_month_name}", key="salt_btn"): save_xp(25, "Gestion", "Facture: Salt"); st.rerun()
         else:
             if st.button(f"PAYER SALT {current_month_name} (EN ATTENTE)", key="salt_btn"): save_xp(25, "Gestion", "Facture: Salt"); st.rerun()
-
 
     st.write("")
 
@@ -293,13 +299,16 @@ with col_left:
 
     st.write("")
 
-    # D. AUTRES FACTURES
+    # D. AUTRES FACTURES (FORMULAIRE AUSSI)
     st.markdown("**AUTRES FACTURES**")
-    c_fac1, c_fac2 = st.columns([0.7, 0.3])
-    with c_fac1: facture_name = st.text_input("Nom facture...", label_visibility="collapsed")
-    with c_fac2:
-        if st.button("PAYER", key="pay_btn"):
-            if facture_name: save_xp(15, "Gestion", f"Facture: {facture_name}"); st.toast("Payé !"); time.sleep(1); st.rerun()
+    with st.form("bills_form", clear_on_submit=True):
+        c_fac1, c_fac2 = st.columns([0.7, 0.3])
+        with c_fac1: facture_name = st.text_input("Nom facture...", label_visibility="collapsed")
+        with c_fac2: 
+            submitted_bill = st.form_submit_button("PAYER")
+            if submitted_bill and facture_name:
+                save_xp(15, "Gestion", f"Facture: {facture_name}")
+                st.toast("Payé !"); time.sleep(1); st.rerun()
 
 # === DROITE ===
 with col_right:
@@ -314,11 +323,13 @@ with col_right:
                 for l in uploaded_file.getvalue().decode("utf-8").splitlines():
                     if l.strip(): add_task(l.strip(), 2)
                 st.rerun()
-        c_in, c_btn = st.columns([0.7, 0.3])
-        with c_in: new_anki = st.text_input("Ajouter cours...", label_visibility="collapsed")
-        with c_btn: 
-            if st.button("AJOUTER", key="add_anki"):
+        
+        # Formulaire pour ajouter cours (Nettoie l'input)
+        with st.form("anki_form", clear_on_submit=True):
+            new_anki = st.text_input("Ajouter cours...", label_visibility="collapsed")
+            if st.form_submit_button("AJOUTER"):
                 if new_anki: add_task(new_anki, 2); st.rerun()
+
         anki_tasks = load_tasks(2)
         if not anki_tasks: st.caption("_Grimoire vide._")
         else:
