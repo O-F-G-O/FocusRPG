@@ -4,9 +4,8 @@ import gspread
 import time
 import random
 import streamlit.components.v1 as components
-import urllib.parse
 from google.oauth2.service_account import Credentials
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Selecta RPG", page_icon="🛡️", layout="wide")
@@ -25,7 +24,7 @@ components.html(
     </script>""", height=0
 )
 
-# --- CSS (V41 - CLEAN & SANS HUD-BOX) ---
+# --- CSS (V42 - CLEAN & ÉQUILIBRÉ) ---
 st.markdown("""
     <style>
     /* SUPPRESSION HEADER */
@@ -70,27 +69,8 @@ st.markdown("""
     .warning-marker + div > button { background: linear-gradient(135deg, #f0ad4e, #ec971f) !important; color: white !important; height: 48px !important; border: none !important; }
     .gold-banner { background: linear-gradient(135deg, #bf953f, #fcf6ba, #b38728, #fbf5b7); color: #5c4004; padding: 15px; text-align: center; border-radius: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; border: 2px solid #d4af37; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
     .sober-marker + div > button { background-color: transparent !important; color: #888 !important; border: 1px solid #ccc !important; font-size: 0.7em !important; height: 28px !important; min-height: 28px !important; text-transform: none !important; width: auto !important; margin-top: 5px; }
-    
-    /* Style pour le lien Calendrier */
-    .cal-link { text-decoration: none; font-size: 1.2em; display:flex; align-items:center; justify-content:center; height: 40px; border: 1px solid #bbb; border-radius: 6px; background: white; }
-    .cal-link:hover { background: #eee; border-color: #333; }
     </style>
     """, unsafe_allow_html=True)
-
-# --- FONCTION LIEN GOOGLE AGENDA ---
-def create_cal_link(title, details=""):
-    base = "https://www.google.com/calendar/render?action=TEMPLATE"
-    # Date par défaut : Demain à 10h
-    now = datetime.now() + timedelta(days=1)
-    start = now.replace(hour=10, minute=0, second=0).strftime('%Y%m%dT%H%M00')
-    end = now.replace(hour=11, minute=0, second=0).strftime('%Y%m%dT%H%M00')
-    
-    params = {
-        "text": f"[RPG] {title}",
-        "details": details,
-        "dates": f"{start}/{end}"
-    }
-    return f"{base}&{urllib.parse.urlencode(params)}"
 
 # --- ENGINE ---
 def get_db():
@@ -165,7 +145,7 @@ progress_pct = total_xp % 100
 current_month_name = ["JANVIER", "FÉVRIER", "MARS", "AVRIL", "MAI", "JUIN", "JUILLET", "AOÛT", "SEPTEMBRE", "OCTOBRE", "NOVEMBRE", "DÉCEMBRE"][datetime.now().month-1]
 
 # ==============================================================================
-# HEADER (SANS LA HUD-BOX BLANCHE)
+# HEADER
 # ==============================================================================
 c_av, c_main, c_nav = st.columns([0.15, 0.65, 0.2])
 with c_av: st.image("avatar.png", width=70)
@@ -203,12 +183,10 @@ if st.session_state['current_page'] == "Dashboard":
             if st.form_submit_button("AJOUTER TÂCHE") and nt: add_task(nt, 1); st.rerun()
         
         for i, t in enumerate(load_tasks_v2(1)):
-            cl1, cl2, cl3, cl4 = st.columns([0.65, 0.12, 0.12, 0.11])
+            cl1, cl2, cl3 = st.columns([0.75, 0.12, 0.13])
             cl1.write(f"• {t}")
-            # Bouton Agenda pour chaque tâche
-            cl2.link_button("📅", create_cal_link(t), help="Planifier dans Google Agenda")
-            if cl3.button("✓", key=f"q_{i}"): save_xp(5, "Gestion", t); del_task(t, 1); st.rerun()
-            if cl4.button("×", key=f"d_{i}"): del_task(t, 1); st.rerun()
+            if cl2.button("✓", key=f"q_{i}"): save_xp(10, "Gestion", t); del_task(t, 1); st.rerun()
+            if cl3.button("×", key=f"d_{i}"): del_task(t, 1); st.rerun()
 
         st.markdown('<div class="section-header">🛡️ GESTION DU ROYAUME</div>', unsafe_allow_html=True)
         st.markdown("**LOYER**")
@@ -217,7 +195,7 @@ if st.session_state['current_page'] == "Dashboard":
             day = datetime.now().day
             if day >= 29: st.markdown('<span class="urgent-marker"></span>', unsafe_allow_html=True)
             elif day >= 20: st.markdown('<span class="warning-marker"></span>', unsafe_allow_html=True)
-            if st.button(f"🏠 PAYER LOYER {current_month_name}", key="r_b"): save_xp(50, "Gestion", "Loyer"); st.rerun()
+            if st.button(f"🏠 PAYER LOYER {current_month_name}", key="r_b"): save_xp(30, "Gestion", "Loyer"); st.rerun()
         if rent_paid:
              st.markdown('<span class="sober-marker"></span>', unsafe_allow_html=True)
              if st.button("↺ Annuler", key="undo_r"): undo_payment("Loyer"); st.rerun()
@@ -225,23 +203,21 @@ if st.session_state['current_page'] == "Dashboard":
         st.write(""); st.markdown("**SALT**")
         if salt_paid: st.markdown(f'<div class="gold-banner">✨ SALT {current_month_name} RÉGLÉ ✨</div>', unsafe_allow_html=True)
         else:
-            if st.button(f"🏠 PAYER SALT {current_month_name}", key="s_b"): save_xp(25, "Gestion", "Facture: Salt"); st.rerun()
+            if st.button(f"🏠 PAYER SALT {current_month_name}", key="s_b"): save_xp(30, "Gestion", "Facture: Salt"); st.rerun()
         if salt_paid:
              st.markdown('<span class="sober-marker"></span>', unsafe_allow_html=True)
              if st.button("↺ Annuler", key="undo_s"): undo_payment("Salt"); st.rerun()
 
         st.write(""); st.markdown("**COMMUNICATIONS**")
         c1, c2, c3 = st.columns(3)
-        with c1: st.button("🧹 TRIER", key="m1", on_click=save_xp, args=(5, "Gestion", "Tri Mails"))
+        with c1: st.button("🧹 TRIER", key="m1", on_click=save_xp, args=(10, "Gestion", "Tri Mails"))
         with c2: st.button("✍️ RÉPONDRE", key="m2", on_click=save_xp, args=(10, "Gestion", "Réponse Mails"))
-        with c3: 
-            # Le bouton Agenda ouvre Google Calendar
-            st.link_button("📅 AGENDA", create_cal_link("Session Admin / Agenda"), help="Ouvrir Google Agenda")
+        with c3: st.button("📅 AGENDA", key="m3", on_click=save_xp, args=(10, "Gestion", "Agenda"))
 
         st.write(""); st.markdown("**AUTRES FACTURES**")
         with st.form("b_f", clear_on_submit=True):
             f1, f2 = st.columns([0.7, 0.3]); fn = f1.text_input("Nom...", label_visibility="collapsed")
-            if f2.form_submit_button("PAYER") and fn: save_xp(15, "Gestion", f"Facture: {fn}"); st.rerun()
+            if f2.form_submit_button("PAYER") and fn: save_xp(10, "Gestion", f"Facture: {fn}"); st.rerun()
 
     with col_r:
         st.markdown('<div class="section-header">🧠 FORGE DU SAVOIR</div>', unsafe_allow_html=True)
