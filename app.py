@@ -16,7 +16,7 @@ components.html(
     function cleanInputs() {
         const inputs = window.parent.document.querySelectorAll('input[type="text"]');
         inputs.forEach(input => {
-            input.setAttribute('autocomplete', 'new-password'); // Plus efficace que 'off'
+            input.setAttribute('autocomplete', 'new-password');
             input.setAttribute('spellcheck', 'false');
         });
     }
@@ -24,16 +24,23 @@ components.html(
     </script>""", height=0
 )
 
-# --- CSS (V39 - OPTIMISÉ NATEL & ZÉRO BLANC) ---
+# --- CSS (V40 - MOBILE OK + ZERO BLANC + SPORT OK) ---
 st.markdown("""
     <style>
-    /* 1. SUPPRESSION RADICALE DU HEADER (CARRÉ BLANC) */
+    /* 1. SUPPRESSION RADICALE DU HEADER */
     header { display: none !important; }
     [data-testid="stHeader"] { display: none !important; }
     .block-container { padding-top: 0rem !important; margin-top: -2rem !important; }
     
     /* Fond global */
     .stApp { background-color: #f4f6f9; color: #333; }
+
+    /* === HUD HEADER === */
+    .hud-box {
+        background-color: white; padding: 20px; border-radius: 0 0 15px 15px;
+        border-bottom: 3px solid #333; box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        margin-bottom: 30px; margin-left: -1rem; margin-right: -1rem;
+    }
 
     /* === BARRES === */
     .bar-label { font-weight: 700; font-size: 0.8em; color: #555; margin-bottom: 5px; display: flex; justify-content: space-between; }
@@ -43,7 +50,7 @@ st.markdown("""
     .mana-fill { background: linear-gradient(90deg, #0056b3, #007bff); }
     .chaos-fill { background: linear-gradient(90deg, #800000, #a71d2a); }
 
-    /* === UI GÉNÉRALE === */
+    /* === UI === */
     .section-header { font-size: 1.1em; font-weight: 800; text-transform: uppercase; color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; margin-bottom: 15px; margin-top: 20px; }
     
     .stButton>button, .stFormSubmitButton>button {
@@ -54,24 +61,22 @@ st.markdown("""
     
     .timer-box { font-family: 'Courier New', monospace; font-size: 2.2em; font-weight: bold; color: #d9534f; text-align: center; background-color: #fff; border: 2px solid #d9534f; border-radius: 8px; padding: 15px; margin: 10px 0; }
 
-    /* === COMMUNICATIONS (TAILLE EGALE) === */
+    /* === COMMUNICATIONS === */
     [data-testid="column"] .stButton button { height: 45px !important; }
 
-    /* === ADAPTATION MOBILE (NATEL) === */
+    /* === MOBILE === */
     @media (max-width: 768px) {
         .hud-box { padding: 10px; margin-top: -1.5rem; margin-left: -0.5rem; margin-right: -0.5rem; }
         .hud-box h2 { font-size: 1.1em !important; }
-        .hud-box img { width: 55px !important; } /* Réduit l'avatar */
+        .hud-box img { width: 55px !important; }
         .bar-label { font-size: 0.65em; }
         .bar-container { height: 12px; }
-        
-        /* Ajuste la navigation pour mobile */
         [data-testid="column"] { min-width: 0px !important; }
         .nav-btn-container { gap: 5px !important; }
         .stButton button { font-size: 0.75em !important; padding: 0px !important; }
     }
 
-    /* === BANNIERES CUSTOM === */
+    /* === BANNIERES === */
     @keyframes pulse-red { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
     .urgent-marker + div > button { background: linear-gradient(135deg, #d9534f, #c9302c) !important; color: white !important; animation: pulse-red 1.5s infinite !important; height: 55px !important; font-weight: 900 !important; border: none !important; }
     .warning-marker + div > button { background: linear-gradient(135deg, #f0ad4e, #ec971f) !important; color: white !important; height: 48px !important; font-weight: 800 !important; border: none !important; }
@@ -84,7 +89,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- ENGINE G-SHEETS ---
+# --- ENGINE ---
 def get_db():
     secrets = st.secrets["connections"]["gsheets"]
     creds = Credentials.from_service_account_info(secrets, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
@@ -133,8 +138,20 @@ def get_stats():
         return xp, mana, chaos, rent, salt, df
     except: return 0, 100, 0, False, False, pd.DataFrame()
 
+# --- DATA SPORT (RESSUSCITÉE) ---
+FULL_BODY_PROGRAMS = {
+    "FB1. STRENGTH": "SQUAT 3x5\nBENCH 3x5\nROWING 3x6\nRDL 3x8\nPLANK 3x1min",
+    "FB2. HYPERTROPHY": "PRESSE 3x12\nTIRAGE 3x12\nCHEST PRESS 3x12\nLEG CURL 3x15\nELEVATIONS 3x15",
+    "FB3. POWER": "CLEAN 5x3\nJUMP LUNGE 3x8\nPULLUPS 4xMAX\nDIPS 4xMAX\nSWING 3x20",
+    "FB4. DUMBBELLS": "GOBLET SQUAT 4x10\nINCLINE PRESS 3x10\nROWING 3x12\nLUNGES 3x10\nARMS 3x12",
+    "FB7. CIRCUIT": "THRUSTERS x10\nRENEGADE ROW x8\nCLIMBERS x20\nPUSHUPS xMAX\nJUMPS x15"
+}
+
 # --- INIT ---
+if 'gym_current_prog' not in st.session_state: st.session_state['gym_current_prog'] = None
+if 'anki_start_time' not in st.session_state: st.session_state['anki_start_time'] = None
 if 'current_page' not in st.session_state: st.session_state['current_page'] = "Dashboard"
+
 total_xp, current_mana, current_chaos, rent_paid, salt_paid, df_full = get_stats()
 niveau = 1 + (total_xp // 100)
 progress_pct = total_xp % 100
@@ -144,7 +161,7 @@ current_month_name = ["JANVIER", "FÉVRIER", "MARS", "AVRIL", "MAI", "JUIN", "JU
 # HUD HEADER
 # ==============================================================================
 st.markdown('<div class="hud-box">', unsafe_allow_html=True)
-c_av, c_main, c_nav = st.columns([0.1, 0.65, 0.25])
+c_av, c_main, c_nav = st.columns([0.1, 0.7, 0.2])
 with c_av: st.image("avatar.png", width=80)
 with c_main:
     st.markdown(f"<h2 style='margin:0; border:none;'>NIVEAU {niveau} | SELECTA</h2>", unsafe_allow_html=True)
@@ -166,7 +183,7 @@ with c_b3: draw_bar("CHAOS", current_chaos, "chaos-fill")
 st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# LOGIQUE DES PAGES
+# PAGES LOGIC
 # ==============================================================================
 
 if st.session_state['current_page'] == "Dashboard":
@@ -237,10 +254,33 @@ if st.session_state['current_page'] == "Dashboard":
                     mm, ss = divmod(int((datetime.now() - st.session_state['anki_start_time']).total_seconds()), 60)
                     st.markdown(f'<div class="timer-box">{mm:02d}:{ss:02d}</div>', unsafe_allow_html=True); time.sleep(1); st.rerun()
 
+        # === SPORT RESTAURÉ (TIMER & ROULETTE) ===
         st.markdown('<div class="section-header">⚡ ENTRAÎNEMENT</div>', unsafe_allow_html=True)
-        cs1, cs2 = st.columns(2)
-        with cs1: st.button("🏠 MAISON (+20 XP)", on_click=save_xp, args=(20, "Force", "Maison"))
-        with cs2: st.button("🏋️ SALLE (+50 XP)", on_click=save_xp, args=(50, "Force", "Salle"))
+        cs1, cs2 = st.columns(2, gap="medium")
+        
+        with cs1: # MAISON
+            st.markdown("**🏠 MAISON**")
+            if st.button("⏱️ TIMER 20 MIN"):
+                ph = st.empty()
+                for s in range(1200, -1, -1):
+                    m, sec = divmod(s, 60)
+                    ph.markdown(f'<div class="timer-box">{m:02d}:{sec:02d}</div>', unsafe_allow_html=True)
+                    time.sleep(1)
+            if st.button("VALIDER MAISON (+20 XP)"): save_xp(20, "Force", "Maison"); st.rerun()
+
+        with cs2: # SALLE
+            st.markdown("**🏋️ SALLE**")
+            if st.button("🎲 GÉNÉRER SÉANCE"):
+                n, d = random.choice(list(FULL_BODY_PROGRAMS.items()))
+                st.session_state['gym_current_prog'] = (n, d)
+                st.rerun()
+            
+            if st.session_state['gym_current_prog']:
+                n, d = st.session_state['gym_current_prog']
+                st.markdown(f"**{n}**")
+                for l in d.split('\n'): st.markdown(f"- {l}")
+                if st.button("VALIDER SALLE (+50 XP)"):
+                    save_xp(50, "Force", n); st.session_state['gym_current_prog']=None; st.rerun()
 
 elif st.session_state['current_page'] == "Histoire":
     st.markdown('<div class="section-header">📜 JOURNAL DE BORD</div>', unsafe_allow_html=True)
