@@ -27,9 +27,10 @@ components.html(
 # --- CSS (V38 - ZERO BLANC & HUD) ---
 st.markdown("""
     <style>
-    /* 1. SUPPRESSION DU HEADER STREAMLIT (CARRÉ BLANC) */
-    [data-testid="stHeader"] { visibility: hidden; height: 0px; }
-    .block-container { padding-top: 0rem !important; margin-top: 0rem !important; }
+    /* 1. SUPPRESSION RADICALE DU HEADER (CARRÉ BLANC) */
+    header { display: none !important; }
+    [data-testid="stHeader"] { display: none !important; }
+    .block-container { padding-top: 0rem !important; margin-top: -2rem !important; }
     
     /* Fond global */
     .stApp { background-color: #f4f6f9; color: #333; }
