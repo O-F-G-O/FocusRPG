@@ -15,7 +15,7 @@ st.markdown("""
     .stApp { background-color: #F8F9FA; color: #333; }
     
     /* Barres */
-    .stProgress > div > div > div > div { background-color: #333; } /* XP */
+    .stProgress > div > div > div > div { background-color: #333; } 
     .mana-bar .stProgress > div > div > div > div { background-color: #00A8E8 !important; } /* Mana */
     .chaos-bar .stProgress > div > div > div > div { background-color: #D9534F !important; } /* Chaos */
 
@@ -28,6 +28,12 @@ st.markdown("""
         display: flex; justify-content: center; align-items: center;
     }
     .stButton>button:hover { background-color: #333; color: white; }
+    
+    /* Bouton Loyer Payé (Vert) */
+    .rent-paid {
+        background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;
+        padding: 10px; text-align: center; border-radius: 4px; font-weight: bold;
+    }
 
     .section-header {
         border-bottom: 2px solid #333;
@@ -41,7 +47,6 @@ st.markdown("""
         border-radius: 5px; padding: 10px; margin: 10px 0; background-color: #fff5f5;
     }
     
-    /* Indicateur Chaos */
     .chaos-text { color: #D9534F; font-weight: bold; font-size: 0.9em; }
     </style>
     """, unsafe_allow_html=True)
@@ -78,41 +83,54 @@ def del_task(t, col_idx):
         ws.update_cell(cell.row, col_idx, "") 
     except: pass
 
-# --- XP & STATS ENGINE ---
+# --- XP & LOGIQUE MÉTIER ---
 def save_xp(amt, type_s, cmt=""):
     try:
         get_db().worksheet("Data").append_row([datetime.now().strftime("%Y-%m-%d %H:%M"), type_s, amt, cmt])
         st.toast(f"+{amt} XP")
     except: st.error("Erreur Save")
 
+def check_rent_paid(df):
+    # Vérifie si "Loyer" apparait dans les commentaires du mois courant
+    try:
+        current_month = datetime.now().strftime("%Y-%m")
+        # On filtre les lignes qui contiennent la date du mois ET le mot "Loyer"
+        # Attention : format date YYYY-MM-DD HH:MM
+        rent_logs = df[df['Date'].str.contains(current_month, na=False) & df['Commentaire'].str.contains("Loyer", case=False, na=False)]
+        return not rent_logs.empty
+    except: return False
+
 def get_stats():
     try:
         df = pd.DataFrame(get_db().worksheet("Data").get_all_records())
-        if df.empty: return 0, 100, 0
+        if df.empty: return 0, 100, 0, False
         
-        # 1. XP TOTAL
+        # 1. XP
         xp = int(pd.to_numeric(df["XP"], errors='coerce').sum())
         
-        # 2. MANA (Intellect)
+        # 2. MANA (Anki)
         anki_logs = df[df['Commentaire'].str.contains("Combat", case=False, na=False)]
         if anki_logs.empty: mana = 50 
         else:
             last_anki = datetime.strptime(anki_logs.iloc[-1]['Date'], "%Y-%m-%d %H:%M")
             days_anki = (datetime.now() - last_anki).days
-            mana = max(0, 100 - (days_anki * 10)) # -10% par jour
+            mana = max(0, 100 - (days_anki * 10))
         
         # 3. CHAOS (Admin)
-        # On cherche les logs de type "Gestion" ou commentaire "Purge"
+        # On cherche logs de Gestion. 
         admin_logs = df[df['Type'].str.contains("Gestion", case=False, na=False)]
-        if admin_logs.empty: chaos = 50
+        if admin_logs.empty: chaos = 20
         else:
             last_admin = datetime.strptime(admin_logs.iloc[-1]['Date'], "%Y-%m-%d %H:%M")
             days_admin = (datetime.now() - last_admin).days
-            # Le Chaos monte de 10% par jour sans admin
-            chaos = min(100, days_admin * 10) 
+            # CORRECTION : Seulement 3% par jour. Faut 1 mois pour être dans la merde.
+            chaos = min(100, days_admin * 3) 
             
-        return xp, mana, chaos
-    except: return 0, 50, 50
+        # 4. Check Loyer
+        is_rent_paid = check_rent_paid(df)
+            
+        return xp, mana, chaos, is_rent_paid
+    except: return 0, 50, 50, False
 
 # --- DATA SPORT ---
 FULL_BODY_PROGRAMS = {
@@ -124,7 +142,7 @@ FULL_BODY_PROGRAMS = {
 }
 
 # --- LOGIQUE ---
-total_xp, current_mana, current_chaos = get_stats()
+total_xp, current_mana, current_chaos, rent_paid_status = get_stats()
 niveau = 1 + (total_xp // 100)
 progress_pct = total_xp % 100
 xp_needed = 100 - progress_pct
@@ -135,12 +153,9 @@ with c_avatar:
     st.image("avatar.png", width=90)
 with c_infos:
     st.markdown(f"### NIV. {niveau} | SELECTA")
-    
-    # XP
     st.caption(f"**XP : {total_xp}** (Prochain : {xp_needed})")
     st.progress(progress_pct / 100)
     
-    # MANA & CHAOS sur la même ligne visuelle (2 colonnes)
     cm1, cm2 = st.columns(2)
     with cm1:
         st.caption(f"**MÉMOIRE (MANA) : {current_mana}%**")
@@ -148,7 +163,7 @@ with c_infos:
         st.progress(current_mana / 100)
         st.markdown('</div>', unsafe_allow_html=True)
     with cm2:
-        st.caption(f"**CORRUPTION (CHAOS) : {current_chaos}%**")
+        st.caption(f"**CHAOS (ADMIN) : {current_chaos}%**")
         st.markdown(f'<div class="chaos-bar">', unsafe_allow_html=True)
         st.progress(current_chaos / 100)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -158,29 +173,10 @@ st.write("---")
 # === LAYOUT ===
 col_left, col_right = st.columns([1, 2], gap="large")
 
-# === GAUCHE : QUÊTES & ADMIN ===
+# === GAUCHE : QUÊTES -> PUIS ADMIN ===
 with col_left:
-    # 1. ADMIN (LA CORRUPTION)
-    st.markdown('<p class="section-header">🛡️ GESTION DU ROYAUME (ADMIN)</p>', unsafe_allow_html=True)
-    if current_chaos > 0:
-        st.markdown(f'<p class="chaos-text">⚠️ CORRUPTION À {current_chaos}% - PURGE NÉCESSAIRE</p>', unsafe_allow_html=True)
-    else:
-        st.caption("Le royaume est en ordre.")
-
-    c_adm1, c_adm2 = st.columns(2)
-    with c_adm1:
-        if st.button("🧹 PURGE MAILS"):
-            save_xp(5, "Gestion", "Mails"); st.rerun()
-    with c_adm2:
-        if st.button("💸 BUDGET / BANQUE"):
-            save_xp(10, "Gestion", "Finances"); st.rerun()
     
-    if st.button("📞 APPELS & PAPIERS"):
-        save_xp(15, "Gestion", "Diplomatie"); st.rerun()
-
-    st.write("---")
-
-    # 2. TASKS
+    # --- 1. QUÊTES DU JOUR (TO DO) ---
     st.markdown('<p class="section-header">📌 QUÊTES DU JOUR</p>', unsafe_allow_html=True)
     new_t = st.text_input("Tâche perso...", label_visibility="collapsed")
     if st.button("AJOUTER TÂCHE"):
@@ -196,6 +192,49 @@ with col_left:
         with c3:
             if st.button("×", key=f"xp_{i}"):
                 del_task(t, 1); st.rerun()
+    
+    st.write("---") # Séparateur
+
+    # --- 2. ADMIN (EN DESSOUS) ---
+    st.markdown('<p class="section-header">🛡️ GESTION DU ROYAUME (ADMIN)</p>', unsafe_allow_html=True)
+    
+    # Message d'état (Chaos)
+    if current_chaos > 50:
+        st.markdown(f'<p class="chaos-text">⚠️ ATTENTION : CHAOS À {current_chaos}%</p>', unsafe_allow_html=True)
+    else:
+        st.caption(f"Niveau de Chaos : {current_chaos}% (Stable)")
+
+    # Ligne 1 : Mails & Agenda + Appels
+    c_ad1, c_ad2 = st.columns(2)
+    with c_ad1:
+        if st.button("📧 MAILS & AGENDA"):
+            save_xp(5, "Gestion", "Mails/Agenda"); st.rerun()
+    with c_ad2:
+        if st.button("📞 APPELS / RDV"):
+            save_xp(10, "Gestion", "Appels/RDV"); st.rerun()
+
+    # Ligne 2 : Factures (Input + Bouton)
+    st.write("")
+    c_fac1, c_fac2 = st.columns([0.6, 0.4])
+    with c_fac1:
+        facture_name = st.text_input("Nom facture (ex: Salt)...", label_visibility="collapsed")
+    with c_fac2:
+        if st.button("💸 PAYER"):
+            if facture_name:
+                save_xp(15, "Gestion", f"Facture: {facture_name}")
+                st.toast(f"Facture {facture_name} payée !")
+                time.sleep(1); st.rerun()
+            else:
+                st.toast("Indique le nom de la facture.")
+
+    # Ligne 3 : Loyer (Intelligent)
+    st.write("")
+    if rent_paid_status:
+        st.markdown('<div class="rent-paid">✅ LOYER DU MOIS PAYÉ</div>', unsafe_allow_html=True)
+    else:
+        # Bouton Rouge/Normal pour payer
+        if st.button("🏠 PAYER LOYER (1x/Mois)"):
+            save_xp(50, "Gestion", "Loyer"); st.rerun()
 
 # === DROITE : SPORT & ETUDES ===
 with col_right:
