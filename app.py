@@ -9,82 +9,78 @@ from datetime import datetime
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Selecta RPG", page_icon="🛡️", layout="wide")
 
-# --- CSS PROPRE & MODERNE ---
+# --- CSS (CORRECTIFS V28) ---
 st.markdown("""
     <style>
     /* Fond global */
     .stApp { background-color: #f4f6f9; color: #333; }
     
-    /* === 1. BARRES DE PROGRESSION CUSTOM (HTML) === */
-    .bar-container {
-        background-color: #e0e0e0;
-        border-radius: 10px;
-        width: 100%;
-        height: 20px;
-        margin-top: 5px;
-        margin-bottom: 15px;
-        box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
-        overflow: hidden; /* Important pour que la barre interne ne dépasse pas */
-    }
-    
-    .bar-fill {
-        height: 100%;
-        border-radius: 10px;
-        transition: width 0.5s ease-in-out;
-        display: flex;
-        align-items: center;
-        justify-content: flex-end;
-        padding-right: 5px;
-        color: white;
-        font-size: 0.7em;
-        font-weight: bold;
-    }
+    /* FIX: Supprimer l'espace blanc au dessus du HUD */
+    .block-container { padding-top: 1rem !important; }
 
-    /* COULEURS FORCÉES */
-    .xp-fill { background-color: #8A2BE2; box-shadow: 0 0 10px #8A2BE2; } /* VIOLET */
-    .mana-fill { background-color: #0056b3; box-shadow: 0 0 10px #0056b3; } /* BLEU */
-    .chaos-fill { background-color: #800000; box-shadow: 0 0 10px #800000; } /* BORDEAUX */
-
-    /* === 2. LOYER === */
-    .rent-gold {
-        background: linear-gradient(135deg, #bf953f, #fcf6ba, #b38728, #fbf5b7, #aa771c);
-        color: #5c4004;
-        padding: 15px; 
-        text-align: center; 
-        border-radius: 8px; 
-        font-weight: 900;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        border: 1px solid #a07818;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-        margin-bottom: 15px;
-        text-shadow: 1px 1px 0px rgba(255,255,255,0.5);
-    }
-    
-    /* === 3. UI GENERALE === */
-    /* HUD Header */
+    /* === HUD HEADER === */
     .hud-box {
         background-color: white;
         padding: 15px 25px;
-        border-radius: 12px;
+        border-radius: 0 0 12px 12px; /* Arrondi seulement en bas */
         border-bottom: 4px solid #333;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
         margin-bottom: 30px;
+        margin-top: -1rem; /* Remonte pour coller au bord */
     }
 
-    /* Titres Sections */
+    /* === BARRES PROGRESSION CUSTOM === */
+    .bar-container {
+        background-color: #e0e0e0; border-radius: 10px;
+        width: 100%; height: 20px; margin-top: 5px; margin-bottom: 5px;
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.2); overflow: hidden;
+    }
+    .bar-fill {
+        height: 100%; border-radius: 10px; transition: width 0.5s ease-in-out;
+        display: flex; align-items: center; justify-content: flex-end;
+        padding-right: 5px; color: white; font-size: 0.7em; font-weight: bold;
+    }
+    .xp-fill { background-color: #8A2BE2; box-shadow: 0 0 10px #8A2BE2; }
+    .mana-fill { background-color: #0056b3; box-shadow: 0 0 10px #0056b3; }
+    .chaos-fill { background-color: #800000; box-shadow: 0 0 10px #800000; }
+
+    /* === LOYER : STYLE UNIFIÉ === */
+    .rent-banner {
+        padding: 15px; text-align: center; border-radius: 8px;
+        font-weight: 900; text-transform: uppercase; letter-spacing: 2px;
+        margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+        text-shadow: 1px 1px 0px rgba(255,255,255,0.2);
+    }
+    /* Payé (Or) */
+    .rent-gold {
+        background: linear-gradient(135deg, #bf953f, #fcf6ba, #b38728, #fbf5b7);
+        color: #5c4004; border: 2px solid #d4af37;
+    }
+    /* Urgent (Rouge + Pulse) */
+    @keyframes pulse-red {
+        0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); }
+    }
+    .rent-urgent {
+        background: linear-gradient(135deg, #d9534f, #c9302c);
+        color: white; border: 2px solid #a94442; animation: pulse-red 1.5s infinite;
+        text-shadow: none;
+    }
+    /* Warning (Orange) */
+    .rent-warning {
+        background: linear-gradient(135deg, #f0ad4e, #ec971f);
+        color: white; border: 2px solid #d58512; text-shadow: none;
+    }
+    /* Normal (Gris) */
+    .rent-normal {
+         background: linear-gradient(135deg, #e9ecef, #dee2e6);
+         color: #555; border: 2px solid #ccc;
+    }
+
+    /* === UI GENERALE === */
     .section-header {
-        font-size: 1.1em;
-        font-weight: 800;
-        text-transform: uppercase;
-        color: #444;
-        border-bottom: 2px solid #ddd;
-        padding-bottom: 5px;
-        margin-bottom: 15px;
-        margin-top: 10px;
+        font-size: 1.1em; font-weight: 800; text-transform: uppercase; color: #444;
+        border-bottom: 2px solid #ddd; padding-bottom: 5px; margin-bottom: 15px; margin-top: 20px;
     }
-
-    /* Boutons */
     .stButton>button {
         width: 100%; min-height: 42px;
         border: 1px solid #bbb; border-radius: 6px;
@@ -95,8 +91,6 @@ st.markdown("""
     .stButton>button:hover { 
         border-color: #333; background-color: #333; color: white; transform: translateY(-1px);
     }
-    
-    /* Timer Style */
     .timer-box {
         font-family: 'Courier New', monospace; font-size: 2.2em; font-weight: bold;
         color: #d9534f; text-align: center; 
@@ -106,12 +100,12 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- FONCTION HTML PROGRESS BAR CUSTOM ---
+# --- FONCTION HTML PROGRESS BAR ---
 def draw_bar(label, value, color_class, max_val=100):
     pct = min(100, max(0, (value / max_val) * 100))
     st.markdown(f"""
-    <div style="margin-bottom: 2px; font-weight:bold; font-size:0.85em; color:#555;">
-        {label} <span style="float:right;">{int(value)} / {max_val}</span>
+    <div style="margin-bottom: 2px; font-weight:bold; font-size:0.8em; color:#555;">
+        {label} <span style="float:right;">{int(value)}%</span>
     </div>
     <div class="bar-container">
         <div class="bar-fill {color_class}" style="width: {pct}%;"></div>
@@ -225,7 +219,7 @@ xp_needed = 100 - progress_pct
 current_month_name = MOIS_FR[datetime.now().month]
 
 # ==============================================================================
-# HEADER (HUD) - Largeur Totale - Style Jeu Vidéo
+# HUD HEADER (Collé en haut)
 # ==============================================================================
 st.markdown('<div class="hud-box">', unsafe_allow_html=True)
 c_av, c_main, c_sec = st.columns([0.1, 0.6, 0.3])
@@ -235,15 +229,12 @@ with c_av:
 
 with c_main:
     st.markdown(f"<h2 style='margin:0; padding:0;'>NIVEAU {niveau} | SELECTA</h2>", unsafe_allow_html=True)
-    st.caption(f"Objectif prochain niveau : {xp_needed} XP manquants")
-    # BARRE XP VIOLETTE
+    st.caption(f"{xp_needed} XP requis pour le niveau suivant")
     draw_bar("EXPÉRIENCE", progress_pct, "xp-fill")
 
 with c_sec:
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-    # BARRE MANA BLEUE
     draw_bar("MÉMOIRE (MANA)", current_mana, "mana-fill")
-    # BARRE CHAOS BORDEAUX
     draw_bar("CHAOS (ADMIN)", current_chaos, "chaos-fill")
 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -274,30 +265,32 @@ with col_left:
                 del_task(t, 1); st.rerun()
     
     st.write("")
-    st.write("")
     
-    # 2. GESTION (Anciennement Command Center)
+    # 2. GESTION DU ROYAUME
     st.markdown('<div class="section-header">🛡️ GESTION DU ROYAUME</div>', unsafe_allow_html=True)
 
-    # A. LOYER
+    # A. LOYER (VISUEL UNIFIÉ)
     st.markdown("**LOYER**")
     if rent_paid_status:
-        st.markdown(f'<div class="rent-gold">✨ LOYER {current_month_name} RÉGLÉ ✨</div>', unsafe_allow_html=True)
-        # Petit bouton discret pour annuler
-        if st.button("annuler paiement", key="undo_rent"):
-            undo_rent_payment(); st.rerun()
+        st.markdown(f'<div class="rent-banner rent-gold">✨ LOYER {current_month_name} RÉGLÉ ✨</div>', unsafe_allow_html=True)
+        # Petit lien discret pour annuler
+        if st.button("annuler (erreur)", key="undo_rent"):
+             undo_rent_payment(); st.rerun()
     else:
         day = datetime.now().day
         if day >= 29:
-            st.error(f"⚠️ URGENCE : PAYER LOYER {current_month_name}")
+            # URGENT (ROUGE PULSE)
+            st.markdown(f'<div class="rent-banner rent-urgent">⚠️ PAYE LE LOYER DE {current_month_name} !</div>', unsafe_allow_html=True)
             if st.button("🏠 PAYER MAINTENANT", type="primary"): 
                 save_xp(50, "Gestion", "Loyer"); st.rerun()
         elif day >= 20:
-            st.warning(f"Rappel : Loyer de {current_month_name}")
-            if st.button("🏠 PAYER LOYER", type="primary"):
+            # WARNING (ORANGE)
+            st.markdown(f'<div class="rent-banner rent-warning">RAPPEL : LOYER DE {current_month_name}</div>', unsafe_allow_html=True)
+            if st.button("🏠 PAYER LOYER"):
                 save_xp(50, "Gestion", "Loyer"); st.rerun()
         else:
-            st.info(f"Loyer de {current_month_name} (En attente)")
+            # NORMAL (NEUTRE)
+            st.markdown(f'<div class="rent-banner rent-normal">LOYER DE {current_month_name} (EN ATTENTE)</div>', unsafe_allow_html=True)
             if st.button("🏠 PAYER LOYER"):
                 save_xp(50, "Gestion", "Loyer"); st.rerun()
 
@@ -326,17 +319,18 @@ with col_left:
                 save_xp(15, "Gestion", f"Facture: {facture_name}"); st.toast("Payé !"); time.sleep(1); st.rerun()
 
 
-# === COLONNE DROITE : ETUDES & SPORT ===
+# === COLONNE DROITE : ETUDES & SPORT (RETOUR AUX COLONNES) ===
 with col_right:
     
     # 3. ETUDES
     st.markdown('<div class="section-header">🧠 FORGE DU SAVOIR</div>', unsafe_allow_html=True)
     
-    # Séparation Claire : Backlog vs Combat
-    tab_create, tab_combat = st.tabs(["📜 GRIMOIRE (COURS)", "⚔️ COMBAT (ANKI)"])
+    # RETOUR AUX COLONNES CÔTE À CÔTE
+    c_create, c_combat = st.columns(2, gap="medium")
     
-    with tab_create:
-        with st.expander("📥 IMPORTER FICHIER TXT"):
+    with c_create:
+        st.caption("📜 **GRIMOIRE (COURS)**")
+        with st.expander("📥 IMPORTER TXT"):
             uploaded_file = st.file_uploader("Un cours par ligne", type="txt")
             if uploaded_file and st.button("IMPORTER"):
                 stringio = uploaded_file.getvalue().decode("utf-8")
@@ -359,7 +353,8 @@ with col_right:
                 if c2.button("✓", key=f"va_{i}"):
                     save_xp(30, "Intellect", f"Création: {t}"); del_task(t, 2); st.rerun()
 
-    with tab_combat:
+    with c_combat:
+        st.caption("⚔️ **COMBAT (ANKI)**")
         if st.session_state['anki_start_time'] is None:
             st.info("Prêt à réviser ?")
             if st.button("⚔️ LANCER LE COMBAT", type="primary"):
@@ -388,10 +383,11 @@ with col_right:
     # 4. SPORT
     st.markdown('<div class="section-header">⚡ ENTRAÎNEMENT</div>', unsafe_allow_html=True)
     
-    # Utilisation de Tabs pour nettoyer l'interface
-    tab_home, tab_gym = st.tabs(["🏠 MAISON", "🏋️ SALLE"])
+    # RETOUR AUX COLONNES CÔTE À CÔTE
+    c_home, c_gym = st.columns(2, gap="medium")
     
-    with tab_home:
+    with c_home:
+        st.markdown("**🏠 MAISON**")
         if st.button("⏱️ TIMER 20 MIN"):
             ph = st.empty()
             for s in range(1200, -1, -1):
@@ -400,7 +396,8 @@ with col_right:
                 time.sleep(1)
         if st.button("VALIDER MAISON (+20 XP)"): save_xp(20, "Force", "Maison"); st.rerun()
 
-    with tab_gym:
+    with c_gym:
+        st.markdown("**🏋️ SALLE**")
         if st.button("🎲 GÉNÉRER SÉANCE"):
             n, d = random.choice(list(FULL_BODY_PROGRAMS.items()))
             st.session_state['gym_current_prog'] = (n, d)
