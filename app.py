@@ -35,13 +35,6 @@ st.markdown("""
     /* Fond global */
     .stApp { background-color: #f4f6f9; color: #333; }
 
-    /* === HUD HEADER === */
-    .hud-box {
-        background-color: white; padding: 20px; border-radius: 0 0 15px 15px;
-        border-bottom: 3px solid #333; box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-        margin-bottom: 30px; margin-left: -1rem; margin-right: -1rem;
-    }
-
     /* === BARRES === */
     .bar-label { font-weight: 700; font-size: 0.8em; color: #555; margin-bottom: 5px; display: flex; justify-content: space-between; }
     .bar-container { background-color: #e9ecef; border-radius: 8px; width: 100%; height: 16px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); overflow: hidden; }
