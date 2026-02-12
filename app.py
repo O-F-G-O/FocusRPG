@@ -2,61 +2,68 @@ import streamlit as st
 import pandas as pd
 import gspread
 import time
-import random
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="Selecta Dash", page_icon="⚫", layout="wide")
+st.set_page_config(page_title="Selecta RPG", page_icon="⚔️", layout="wide")
 
-# --- CSS (STYLE ÉPURÉ & BOUTONS) ---
+# --- CSS PERSONNALISÉ (POUR L'ANIMATION) ---
 st.markdown("""
     <style>
-    .stApp { background-color: #F8F9FA; }
+    .stApp { background-color: #202124; color: white; }
     
-    /* Boutons Outline */
-    .stButton>button {
-        width: 100%;
-        border: 1px solid #333;
-        border-radius: 2px;
-        background-color: white;
-        color: #333;
-        font-family: 'Inter', sans-serif;
-        text-transform: uppercase;
-        font-size: 11px;
-        letter-spacing: 1px;
-    }
-    .stButton>button:hover { background-color: #333; color: white; }
-
-    /* Barres de progression */
-    .stProgress > div > div > div > div { background-color: #333; }
-
-    /* Section Headers */
-    .section-header {
-        border-bottom: 1px solid #DDD;
-        padding-bottom: 5px;
-        margin-bottom: 15px;
-        font-weight: 700;
-        letter-spacing: -0.5px;
-    }
-    
-    /* Timer Style */
-    .digital-clock {
-        font-family: 'Courier New', monospace;
-        font-size: 60px;
+    /* Style de la boîte Avatar */
+    .avatar-box {
+        border: 4px solid #444;
+        border-radius: 10px;
+        padding: 10px;
+        background-color: #1a1a1a;
         text-align: center;
-        color: #333;
-        margin: 10px 0;
     }
-    /* Style pour l'image d'évolution */
-    .stImage {
-        border-bottom: 3px solid #333;
+    
+    /* La Barre d'XP Customisée */
+    .xp-container {
+        width: 100%;
+        background-color: #333;
+        border-radius: 15px;
+        height: 25px;
+        position: relative;
+        margin-top: 40px;
         margin-bottom: 20px;
+        box-shadow: inset 0 0 10px #000;
+    }
+    
+    .xp-fill {
+        background: linear-gradient(90deg, #FF4B4B, #FF914D);
+        height: 100%;
+        border-radius: 15px;
+        transition: width 0.5s ease-in-out;
+    }
+    
+    /* Le petit bonhomme qui marche */
+    .walker {
+        position: absolute;
+        top: -35px; /* On le pose SUR la barre */
+        height: 50px;
+        transition: left 0.5s ease-in-out;
+        transform: translateX(-50%); /* Pour centrer le bonhomme sur le curseur */
+    }
+
+    /* Boutons stylés */
+    .stButton>button {
+        background-color: #333;
+        color: white;
+        border: 1px solid #555;
+    }
+    .stButton>button:hover {
+        border-color: #FF4B4B;
+        color: #FF4B4B;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- MOTEUR G-SHEETS ---
+# --- MOTEUR (CONNEXION) ---
 def get_db():
     secrets = st.secrets["connections"]["gsheets"]
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -65,135 +72,129 @@ def get_db():
     return client.open_by_url(secrets["spreadsheet"])
 
 def load_tasks():
-    try:
-        sh = get_db(); ws = sh.worksheet("Tasks")
-        return ws.col_values(1)[1:]
+    try: return get_db().worksheet("Tasks").col_values(1)[1:]
     except: return []
 
-def add_task_to_db(task):
-    try: sh = get_db(); ws = sh.worksheet("Tasks"); ws.append_row([task])
+def add_task(t): 
+    try: get_db().worksheet("Tasks").append_row([t])
     except: pass
 
-def delete_task_from_db(task):
-    try:
-        sh = get_db(); ws = sh.worksheet("Tasks")
-        cell = ws.find(task)
-        if cell: ws.delete_rows(cell.row)
+def del_task(t):
+    try: 
+        ws = get_db().worksheet("Tasks")
+        cell = ws.find(t)
+        ws.delete_rows(cell.row)
     except: pass
 
-def save_xp(amount, stat, comment=""):
+def save_xp(amt, type_s, cmt=""):
     try:
-        sh = get_db(); ws = sh.worksheet("Data")
-        ws.append_row([datetime.now().strftime("%Y-%m-%d %H:%M"), stat, amount, comment])
-        st.toast(f"LOGGED: +{amount} XP")
-    except: st.error("DATABASE ERROR")
+        get_db().worksheet("Data").append_row([datetime.now().strftime("%Y-%m-%d %H:%M"), type_s, amt, cmt])
+        st.toast(f"+{amt} XP ! 🔥")
+    except: st.error("Erreur Save")
 
-def load_xp_total():
+def get_stats():
     try:
-        sh = get_db(); ws = sh.worksheet("Data")
-        df = pd.DataFrame(ws.get_all_records())
+        df = pd.DataFrame(get_db().worksheet("Data").get_all_records())
         if df.empty: return 0
         return int(pd.to_numeric(df["XP"], errors='coerce').sum())
     except: return 0
 
-# --- DATA SPORT ---
-GYM_PROGRAMS = {
-    "1. PUSH (PECS/EPAULES)": "BANC HORIZONTAL : 4 x 8 (Repos: 2min)\nDEVELOPPÉ MILITAIRE : 3 x 10 (Repos: 90s)\nECARTÉS HALTÈRES : 3 x 12 (Repos: 60s)\nDIPIES : 3 x MAX (Repos: 90s)\nEXTENSIONS TRICEPS : 3 x 12 (Repos: 60s)",
-    "2. PULL (DOS/BICEPS)": "SOULEVÉ DE TERRE : 3 x 5 (Repos: 3min)\nTIRAGE VERTICAL : 4 x 10 (Repos: 90s)\nROWING HALTÈRE : 3 x 12 (Repos: 90s)\nFACEPULL : 3 x 15 (Repos: 60s)\nCURL BICEPS : 3 x 12 (Repos: 60s)",
-    "3. LEGS (QUAD/FESSIERS)": "SQUAT BARRE : 4 x 8 (Repos: 3min)\nFENTES BULGARES : 3 x 10 (Repos: 90s)\nPRESSE A CUISSES : 3 x 12 (Repos: 90s)\nLEG CURL : 3 x 15 (Repos: 60s)\nMOLLETS DEBOUT : 4 x 15 (Repos: 60s)",
-    "4. FULL BODY A (FORCE)": "SQUAT : 3 x 5\nBENCH PRESS : 3 x 5\nROWING BARRE : 3 x 5\nREST : 3min entre chaque série",
-    "5. FULL BODY B (HYPERTROPHIE)": "PRESSE CUISSES : 3 x 12\nTIRAGE DOS : 3 x 12\nDEVELOPPÉ HALTÈRES : 3 x 12\nISCHIOS MACHINE : 3 x 15\nREST : 90s entre chaque série",
-    "6. UPPER BODY FOCUS": "TRACTIONS : 3 x MAX\nPOMPES LESTÉES : 3 x 15\nOISEAU HALTÈRES : 3 x 15\nCURL BARRE : 3 x 10\nREST : 60s entre chaque série",
-    "7. LOWER BODY PUMP": "SOULEVÉ TERRE JAMBES TENDUES : 3 x 12\nHIP THRUST : 4 x 10\nLEG EXTENSION : 3 x 15\nABDUCTEURS : 3 x 20\nREST : 60s entre chaque série",
-    "8. ATHLETIC / FONCTIONNEL": "KETTLEBELL SWINGS : 4 x 20\nBURPEES : 4 x 15\nTRAINER GAINAGE : 3 x 1min\nBOX JUMPS : 4 x 10\nREST : 45s (Intensité haute)"
-}
+# --- LOGIQUE D'ÉVOLUTION ---
+total_xp = get_stats()
+niveau = 1 + (total_xp // 100)
+progress_pct = total_xp % 100
 
-# --- LOGIQUE ---
-total_xp = load_xp_total()
-level = 1 + (total_xp // 100)
-progress = (total_xp % 100) / 100
-active_tasks = load_tasks()
-xp_needed = 100 - (total_xp % 100)
+# ICI : C'est là que tu mettras tes images plus tard
+# Je mets des placeholders (liens web) pour que ça marche tout de suite
+# Logique : Si niveau < 5, image 1, sinon image 2, etc.
+if niveau < 5:
+    # Petit bonhomme débutant
+    avatar_img = "https://img.icons8.com/color/96/fantasy.png" 
+elif niveau < 10:
+    # Bonhomme un peu stuffé
+    avatar_img = "https://img.icons8.com/color/96/warrior-male.png"
+else:
+    # Roi
+    avatar_img = "https://img.icons8.com/color/96/king-clover.png"
 
-# --- TOP BAR (EVOLUTION CHART & XP) ---
-# Affichage de l'image d'évolution en pleine largeur
-try:
-    st.image("image_12.png", use_column_width=True)
-except:
-    st.warning("Image 'image_12.png' introuvable. Assurez-vous de l'avoir uploadée sur GitHub.")
+# --- INTERFACE ---
 
-# Barre d'XP et infos du niveau actuel
-col_xp1, col_xp2 = st.columns([3, 1])
-with col_xp1:
-     st.markdown(f"#### NIVEAU ACTUEL : {level}")
-     st.progress(progress)
-     st.caption(f"{total_xp} XP TOTAL ACQUIS")
-with col_xp2:
-     st.metric(label="PROCHAIN NIVEAU DANS", value=f"{xp_needed} XP")
+# 1. EN-TÊTE : AVATAR + BARRE ANIMÉE
+col_avatar, col_stats = st.columns([1, 4])
+
+with col_avatar:
+    # La boîte Avatar (comme V1)
+    st.markdown(f"""
+        <div class="avatar-box">
+            <img src="{avatar_img}" width="100">
+            <h3>Niveau {niveau}</h3>
+            <p style="color:#aaa">Selecta</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+with col_stats:
+    st.markdown(f"### PROCHAIN NIVEAU : {100 - progress_pct} XP")
+    
+    # LA MAGIE HTML : La barre avec le bonhomme qui marche dessus
+    # On calcule la position 'left' en pourcentage
+    st.markdown(f"""
+        <div class="xp-container">
+            <div class="xp-fill" style="width: {progress_pct}%;"></div>
+            <img src="{avatar_img}" class="walker" style="left: {progress_pct}%;">
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.caption(f"XP TOTAL : {total_xp}")
 
 st.write("---")
 
-# --- LAYOUT DASHBOARD ---
-col_left, col_right = st.columns([1, 2], gap="large")
+# 2. COLONNES ACTIONS (Ta disposition préférée)
+c_left, c_right = st.columns([1, 2], gap="large")
 
-# === COLONNE GAUCHE : TO-DO LIST ===
-with col_left:
-    st.markdown('<p class="section-header">LISTE DES TACHES</p>', unsafe_allow_html=True)
+# GAUCHE : TO-DO LIST
+with c_left:
+    st.subheader("📌 TÂCHES")
+    new_t = st.text_input("Nouvelle...", label_visibility="collapsed")
+    if st.button("Ajouter"):
+        if new_t: add_task(new_t); st.rerun()
     
-    t_input = st.text_input("ADD_TASK", key="task_in", label_visibility="collapsed")
-    if st.button("ENREGISTRER TACHE"):
-        if t_input: add_task_to_db(t_input); st.rerun()
-    
-    st.write("")
-    for i, t in enumerate(active_tasks):
-        c1, c2, c3 = st.columns([0.7, 0.2, 0.1])
-        with c1: st.text(t)
-        with c2: 
-            if st.button("✓", key=f"v_{i}"):
-                save_xp(10, "Gestion", t); delete_task_from_db(t); st.rerun()
-        with c3:
-            if st.button("×", key=f"x_{i}"):
-                delete_task_from_db(t); st.rerun()
+    tasks = load_tasks()
+    for t in tasks:
+        c1, c2, c3 = st.columns([0.6, 0.2, 0.2])
+        c1.text(t)
+        if c2.button("✓", key=f"v_{t}"):
+            save_xp(10, "Gestion", t); del_task(t); st.rerun()
+        if c3.button("×", key=f"x_{t}"):
+            del_task(t); st.rerun()
 
-# === COLONNE DROITE : SUPERPOSITION ACTIONS ===
-with col_right:
-    
-    # 1. SPORT
-    st.markdown('<p class="section-header">01. SPORT & PERFORMANCE</p>', unsafe_allow_html=True)
-    c_s1, c_s2 = st.columns(2)
-    with c_s1:
-        if st.button("TIMER MAISON (20 MIN)"):
-            placeholder = st.empty()
+# DROITE : STACK D'ACTIONS
+with c_right:
+    # SPORT
+    st.markdown("##### 01. SPORT")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("⏱️ TIMER 20 MIN"):
+            ph = st.empty()
             for s in range(20*60, -1, -1):
                 m, sec = divmod(s, 60)
-                placeholder.markdown(f'<div class="digital-clock">{m:02d}:{sec:02d}</div>', unsafe_allow_html=True)
+                ph.markdown(f'<h1 style="text-align:center">{m:02d}:{sec:02d}</h1>', unsafe_allow_html=True)
                 time.sleep(1)
-            st.success("SESSION TERMINEE")
-        if st.button("LOG MAISON (+20 XP)"):
-            save_xp(20, "Force", "Home Workout"); st.rerun()
-            
-    with c_s2:
-        choice = st.selectbox("CHOISIR PROGRAMME GYM", list(GYM_PROGRAMS.keys()))
-        if st.button("AFFICHER EXERCICES"):
-            st.info(GYM_PROGRAMS[choice])
-        if st.button("LOG SALLE (+50 XP)"):
-            save_xp(50, "Force", f"Gym: {choice}"); st.rerun()
+            st.success("Fini!")
+        if st.button("Valider Maison (+20)"): save_xp(20, "Force", "Maison"); st.rerun()
+    with c2:
+        prog = st.selectbox("Programme", ["PUSH", "PULL", "LEGS", "FULL BODY"])
+        if st.button("Valider Salle (+50)"): save_xp(50, "Force", prog); st.rerun()
+    
+    st.divider()
+    
+    # ETUDES
+    st.markdown("##### 02. ETUDES")
+    c1, c2 = st.columns(2)
+    if c1.button("🧠 Anki (+15)"): save_xp(15, "Intellect", "Anki"); st.rerun()
+    if c2.button("📝 Cours (+20)"): save_xp(20, "Intellect", "Cours"); st.rerun()
 
-    st.write("---")
+    st.divider()
 
-    # 2. ETUDES
-    st.markdown('<p class="section-header">02. ETUDES & FOCUS</p>', unsafe_allow_html=True)
-    ce1, ce2 = st.columns(2)
-    with ce1:
-        if st.button("SESSION ANKI (+15 XP)"):
-            save_xp(15, "Intellect", "Anki"); st.rerun()
-    with ce2:
-        if st.button("REDACTION / COURS (+20 XP)"):
-            save_xp(20, "Intellect", "Etudes"); st.rerun()
-
-    st.write("---")
-
-    # 3. ADMIN
-    st.markdown('<p class="section-header">03. ADMINISTRATION</p>', unsafe_allow_html=True)
-    if st.button("GESTION MAILS & AGENDA (+5 XP)"):
-        save_xp(5, "Gestion", "Admin"); st.rerun()
+    # ADMIN
+    st.markdown("##### 03. ADMIN")
+    if st.button("📧 Mails/Agenda (+5)"): save_xp(5, "Gestion", "Admin"); st.rerun()
