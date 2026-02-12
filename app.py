@@ -25,7 +25,7 @@ components.html(
     </script>""", height=0
 )
 
-# --- CSS (V46 - STABLE & COMPATIBLE NATEL) ---
+# --- CSS (V47 - MOBILE, ZÉRO BLANC & BOSS ARENA) ---
 st.markdown("""
     <style>
     header { display: none !important; }
@@ -33,7 +33,7 @@ st.markdown("""
     .block-container { padding-top: 1rem !important; margin-top: -2rem !important; }
     .stApp { background-color: #f4f6f9; color: #333; }
 
-    /* STATS BARS */
+    /* BARRES DE STATS DASHBOARD */
     .bar-label { font-weight: 700; font-size: 0.8em; color: #555; margin-bottom: 5px; display: flex; justify-content: space-between; }
     .bar-container { background-color: #e9ecef; border-radius: 8px; width: 100%; height: 16px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); overflow: hidden; }
     .bar-fill { height: 100%; border-radius: 8px; transition: width 0.6s ease-in-out; }
@@ -41,23 +41,36 @@ st.markdown("""
     .mana-fill { background: linear-gradient(90deg, #0056b3, #007bff); }
     .chaos-fill { background: linear-gradient(90deg, #800000, #a71d2a); }
 
-    /* BOSS HP BAR */
-    .boss-hp-container { background-color: #222; border: 3px solid #000; height: 35px; border-radius: 5px; overflow: hidden; margin: 20px 0; position: relative; }
+    /* BARRE DE VIE DU BOSS (STYLE JEU DE COMBAT) */
+    .boss-hp-container { background-color: #222; border: 3px solid #000; height: 35px; border-radius: 5px; overflow: hidden; margin: 20px 0; position: relative; box-shadow: 0 0 15px rgba(255,0,0,0.2); }
     .boss-hp-fill { background: linear-gradient(90deg, #ff0000, #990000); height: 100%; transition: width 1s ease-out; }
-    .boss-hp-text { position: absolute; width: 100%; text-align: center; color: #fff; font-weight: 900; line-height: 35px; text-transform: uppercase; text-shadow: 2px 2px 4px #000; }
+    .boss-hp-text { position: absolute; width: 100%; text-align: center; color: #fff; font-weight: 900; line-height: 35px; text-transform: uppercase; letter-spacing: 2px; text-shadow: 2px 2px 4px #000; }
 
-    /* BUTTONS */
+    /* BOUTONS D'ATTAQUE (ARSENAL) */
+    .atk-btn > div > button {
+        background: linear-gradient(135deg, #ffffff, #f0f0f0) !important;
+        color: #444 !important; border: 1px solid #ccc !important;
+        font-weight: 700 !important; text-transform: none !important;
+        margin-bottom: 10px !important; transition: all 0.3s !important;
+    }
+    .atk-btn > div > button:hover {
+        background: #333 !important; color: #fff !important; transform: scale(1.02); border-color: #000 !important;
+    }
+
     .section-header { font-size: 1.1em; font-weight: 800; text-transform: uppercase; color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; margin-bottom: 15px; margin-top: 20px; }
-    .stButton>button, .stFormSubmitButton>button { width: 100%; min-height: 40px; border: 1px solid #bbb; border-radius: 6px; background-color: white; color: #333; font-weight: 600; text-transform: uppercase; font-size: 0.85em; }
-    .stButton>button:hover { border-color: #333; background-color: #333; color: white; }
     
-    .atk-btn > div > button { background: linear-gradient(135deg, #ffffff, #f0f0f0) !important; color: #444 !important; border: 1px solid #ccc !important; text-transform: none !important; }
-    .atk-btn > div > button:hover { background: #333 !important; color: #fff !important; transform: scale(1.02); }
+    .stButton>button, .stFormSubmitButton>button {
+        width: 100%; min-height: 40px; border: 1px solid #bbb; border-radius: 6px;
+        background-color: white; color: #333; font-weight: 600; text-transform: uppercase; font-size: 0.85em;
+    }
+    .stButton>button:hover, .stFormSubmitButton>button:hover { border-color: #333; background-color: #333; color: white; }
 
+    /* MOBILE ADJUST */
     @media (max-width: 768px) {
         .bar-label { font-size: 0.65em; }
         .bar-container { height: 12px; }
         [data-testid="column"] { min-width: 0px !important; }
+        .stButton button { font-size: 0.75em !important; padding: 0px !important; }
     }
 
     .comm-btn > div > div > button { height: 45px !important; }
@@ -66,9 +79,6 @@ st.markdown("""
     .warning-marker + div > button { background: linear-gradient(135deg, #f0ad4e, #ec971f) !important; color: white !important; height: 48px !important; border: none !important; }
     .gold-banner { background: linear-gradient(135deg, #bf953f, #fcf6ba, #b38728, #fbf5b7); color: #5c4004; padding: 15px; text-align: center; border-radius: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; border: 2px solid #d4af37; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
     .sober-marker + div > button { background-color: transparent !important; color: #888 !important; border: 1px solid #ccc !important; font-size: 0.7em !important; height: 28px !important; min-height: 28px !important; text-transform: none !important; width: auto !important; margin-top: 5px; }
-    
-    .history-card { background: white; padding: 12px; border-radius: 8px; border-left: 5px solid #8A2BE2; margin-bottom: 10px; }
-    .achievement-card { background: white; padding: 20px; border-radius: 12px; border: 2px solid #FFD700; text-align: center; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -100,7 +110,7 @@ def del_task(t, col_idx):
 def save_xp(amt, type_s, cmt=""):
     try:
         get_db().worksheet("Data").append_row([datetime.now().strftime("%Y-%m-%d %H:%M"), type_s, amt, cmt])
-        st.toast(f"+{amt} XP")
+        st.toast(f"⚔️ +{amt} XP")
     except: pass
 
 def get_stats():
@@ -132,9 +142,11 @@ def load_boss_chapters(boss_name):
 
 def attack_boss(boss_name, chapter_name, damage):
     db = get_db()
-    ws_tasks = db.worksheet("Boss_Tasks"); cell = ws_tasks.find(chapter_name)
+    ws_tasks = db.worksheet("Boss_Tasks")
+    cell = ws_tasks.find(chapter_name)
     if cell: ws_tasks.delete_rows(cell.row)
-    ws_boss = db.worksheet("Bosses"); b_cell = ws_boss.find(boss_name)
+    ws_boss = db.worksheet("Bosses")
+    b_cell = ws_boss.find(boss_name)
     current_pv = float(ws_boss.cell(b_cell.row, 4).value)
     ws_boss.update_cell(b_cell.row, 4, max(0, current_pv - damage))
 
@@ -153,9 +165,9 @@ progress_pct = total_xp % 100
 current_month_name = ["JANVIER", "FÉVRIER", "MARS", "AVRIL", "MAI", "JUIN", "JUILLET", "AOÛT", "SEPTEMBRE", "OCTOBRE", "NOVEMBRE", "DÉCEMBRE"][datetime.now().month-1]
 
 # ==============================================================================
-# HEADER (FIXED ValueError)
+# HEADER
 # ==============================================================================
-c_av, c_main, c_nav = st.columns([0.15, 0.60, 0.25]) # 3 variables pour 3 colonnes !
+c_av, c_main, c_nav = st.columns([0.15, 0.60, 0.25])
 with c_av: st.image("avatar.png", width=70)
 with c_main:
     st.markdown(f"<h3 style='margin:0; padding-top:10px;'>NIVEAU {niveau} | SELECTA</h3>", unsafe_allow_html=True)
@@ -201,11 +213,7 @@ if st.session_state['current_page'] == "Dashboard":
             if paid: 
                 st.markdown(f'<div class="gold-banner">✨ {name} {current_month_name} RÉGLÉ ✨</div>', unsafe_allow_html=True)
                 st.markdown('<span class="sober-marker"></span>', unsafe_allow_html=True)
-                if st.button(f"↺ Annuler {name}", key=f"undo_{k}"): 
-                    from gspread.utils import finditem
-                    db = get_db().worksheet("Data")
-                    # Logique simplified pour l'exemple
-                    st.toast("Supprime la ligne manuellement sur Excel pour l'instant."); st.rerun()
+                if st.button(f"↺ Annuler paiement {name}", key=f"undo_{k}"): st.toast("Action manuelle requise sur GSheets."); st.rerun()
             else:
                 if st.button(f"🏠 PAYER {name}", key=f"btn_{k}"): save_xp(xp_v, "Gestion", name); st.rerun()
 
@@ -243,60 +251,69 @@ if st.session_state['current_page'] == "Dashboard":
                     m, sc = divmod(s, 60); p.markdown(f'<div class="timer-box">{m:02d}:{sc:02d}</div>', unsafe_allow_html=True); time.sleep(1)
             st.button("VALIDER MAISON (+20 XP)", on_click=save_xp, args=(20, "Force", "Maison"))
         with cs2:
-            if st.button("🎲 GÉNÉRER SÉANCE"): st.session_state['gym_p'] = random.choice(["Force", "Hypertrophie", "Cardio"]); st.rerun()
+            if st.button("🎲 GÉNÉRER SÉANCE"): st.session_state['gym_p'] = random.choice(["Full Body Force", "Hypertrophie", "Cardio Intense"]); st.rerun()
             if 'gym_p' in st.session_state: st.info(st.session_state['gym_p'])
             st.button("VALIDER SALLE (+50 XP)", on_click=save_xp, args=(50, "Force", "Salle"))
 
 elif st.session_state['current_page'] == "Donjon":
     st.markdown('<div class="section-header">⚔️ LES PROFONDEURS DU DONJON</div>', unsafe_allow_html=True)
-    with st.expander("➕ INVOQUER UN BOSS"):
+    with st.expander("➕ INVOQUER UN BOSS (EXAMEN)"):
         with st.form("nb", clear_on_submit=True):
-            n = st.text_input("Examen"); d = st.date_input("Échéance"); ch = st.number_input("Nombre chapitres", 1)
-            if st.form_submit_button("SCELLER"): get_db().worksheet("Bosses").append_row([n, d.strftime("%Y-%m-%d"), ch, 100]); st.rerun()
+            n = st.text_input("Nom de l'Examen"); d = st.date_input("Date de l'échéance")
+            if st.form_submit_button("SCELLER LE PACTE"):
+                try: get_db().worksheet("Bosses").append_row([n, d.strftime("%Y-%m-%d"), 0, 100]); st.rerun()
+                except: st.error("Onglet 'Bosses' manquant dans Excel !")
     
     df_b = load_bosses()
-    if df_b.empty: st.write("Donjon vide.")
+    if df_b.empty: st.write("Donjon vide. Invoque un Boss pour commencer.")
     else:
         for _, b in df_b.iterrows():
-            pv = b['PV_Restants']
-            st.markdown(f"## 👹 {b['Nom']}")
-            st.markdown(f'<div class="boss-hp-container"><div class="boss-hp-text">{int(pv)}% HP</div><div class="boss-hp-fill" style="width:{pv}%"></div></div>', unsafe_allow_html=True)
+            pv = b['PV_Restants']; b_name = b['Nom']
+            st.markdown(f"## 👹 {b_name}")
+            st.markdown(f'<div class="boss-hp-container"><div class="boss-hp-text">{int(pv)}% PV RESTANTS</div><div class="boss-hp-fill" style="width:{pv}%"></div></div>', unsafe_allow_html=True)
             
-            df_c = load_boss_chapters(b['Nom'])
+            df_c = load_boss_chapters(b_name)
             if df_c.empty and pv > 0:
-                up = st.file_uploader(f"Munitions pour {b['Nom']}", type="txt", key=f"up_{b['Nom']}")
+                up = st.file_uploader(f"Charge tes munitions pour {b_name} (.txt)", type="txt", key=f"up_{b_name}")
                 if up:
                     content = up.getvalue().decode("utf-8").splitlines()
-                    ws = get_db().worksheet("Boss_Tasks")
-                    for line in content:
-                        if line.strip(): ws.append_row([b['Nom'], line.strip()])
+                    chapters = [line.strip() for line in content if line.strip()]
+                    ws_t = get_db().worksheet("Boss_Tasks"); ws_b = get_db().worksheet("Bosses")
+                    for c in chapters: ws_t.append_row([b_name, c])
+                    row_idx = ws_b.find(b_name).row
+                    ws_b.update_cell(row_idx, 3, len(chapters)) # Total_Initial
                     st.rerun()
             elif pv > 0:
                 dmg = 100 / b['Total_Initial']
+                st.write("### 🗡️ CHOISIS TON ATTAQUE (ARSENAL)")
                 cols = st.columns(2)
                 for i, row in enumerate(df_c.iterrows()):
                     with cols[i%2]:
                         st.markdown('<div class="atk-btn">', unsafe_allow_html=True)
-                        if st.button(f"⚔️ {row[1]['Chapitre']}", key=f"atk_{b['Nom']}_{i}"):
-                            attack_boss(b['Nom'], row[1]['Chapitre'], dmg); save_xp(10, "Combat", b['Nom']); st.rerun()
+                        if st.button(f"🔥 {row[1]['Chapitre']}", key=f"atk_{b_name}_{i}"):
+                            attack_boss(b_name, row[1]['Chapitre'], dmg); save_xp(10, "Combat Boss", b_name); st.rerun()
                         st.markdown('</div>', unsafe_allow_html=True)
             else:
-                st.success("VAINCU !"); st.button(f"💎 TRÉSOR Boss {b['Nom']} (+200 XP)", on_click=save_xp, args=(200, "Victoire", b['Nom']))
+                st.success(f"🏆 {b_name} TERRASSÉ !"); st.button(f"💎 RÉCLAMER TRÉSOR (+200 XP)", key=f"win_{b_name}", on_click=save_xp, args=(200, "Victoire", b_name))
 
 elif st.session_state['current_page'] == "Histoire":
-    st.markdown('<div class="section-header">📜 JOURNAL</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">📜 JOURNAL DE BORD</div>', unsafe_allow_html=True)
     if not df_full.empty:
         for _, r in df_full.iloc[::-1].head(15).iterrows():
-            st.markdown(f'<div class="history-card"><b>{r["Date"]}</b> | {r["Type"]} | +{r["XP"]} XP<br>{r["Commentaire"]}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="history-card"><b>{r["Date"]}</b> | {r["Type"]} | <b>+{r["XP"]} XP</b><br>{r["Commentaire"]}</div>', unsafe_allow_html=True)
 
 elif st.session_state['current_page'] == "HautsFaits":
     st.markdown('<div class="section-header">🏆 SALLE DES HAUTS FAITS</div>', unsafe_allow_html=True)
-    if df_full.empty: st.write("Aucun trophée.")
+    if df_full.empty: st.write("Aucun exploit enregistré.")
     else:
         h1, h2, h3 = st.columns(3)
         with h1: 
-            if niveau >= 2: st.markdown('<div class="achievement-card">🎖️<br><b>PREMIER PAS</b></div>', unsafe_allow_html=True)
+            if niveau >= 2: st.markdown('<div class="achievement-card">🎖️<br><b>PREMIER PAS</b><br><small>Atteindre le Niv. 2</small></div>', unsafe_allow_html=True)
         with h2:
-            if any(df_full['Commentaire'].str.contains("Loyer", na=False)): st.markdown('<div class="achievement-card">💰<br><b>INTENDANT</b></div>', unsafe_allow_html=True)
+            try:
+                if any(df_full['Commentaire'].str.contains("LOYER", na=False)): st.markdown('<div class="achievement-card">💰<br><b>INTENDANT</b><br><small>Payer son premier loyer</small></div>', unsafe_allow_html=True)
+            except: pass
         with h3:
-            if len(df_full[df_full['Commentaire'].str.contains("Anki", na=False)]) >= 10: st.markdown('<div class="achievement-card">🔥<br><b>ASSIDUITÉ</b></div>', unsafe_allow_html=True)
+            try:
+                if len(df_full[df_full['Commentaire'].str.contains("Anki", na=False)]) >= 10: st.markdown('<div class="achievement-card">🔥<br><b>ASSIDUITÉ</b><br><small>10 sessions Anki</small></div>', unsafe_allow_html=True)
+            except: pass
