@@ -9,38 +9,41 @@ from datetime import datetime
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Selecta RPG", page_icon="🛡️", layout="wide")
 
-# --- CSS (CORRECTIFS V29 - ALIGNEMENT & BOUTONS CUSTOM) ---
+# --- CSS (CORRECTIFS V30 - ALIGNEMENT FINAL & BOUTONS) ---
 st.markdown("""
     <style>
     /* Fond global */
     .stApp { background-color: #f4f6f9; color: #333; }
-    /* Supprimer marge haut */
-    .block-container { padding-top: 1rem !important; }
+    
+    /* RESTAURATION DU PADDING HAUT (Pour ne pas couper le HUD) */
+    .block-container { padding-top: 2rem !important; }
 
-    /* === HEADER HUD ALIGNÉ === */
-    /* On s'assure que les éléments du header sont centrés verticalement */
-    [data-testid="stHorizontalBlock"] > div {
-        display: flex;
-        align-items: center;
+    /* === HEADER HUD STYLISÉ === */
+    .hud-box {
+        background-color: white;
+        padding: 20px;
+        border-radius: 12px;
+        border-bottom: 3px solid #333;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        margin-bottom: 30px;
     }
-    h2 { margin-bottom: 0px !important; } /* Remonte le titre */
-    .stCaption { margin-top: 0px !important; margin-bottom: 5px !important; }
 
     /* === BARRES PROGRESSION CUSTOM === */
+    .bar-label {
+        font-weight: 700; font-size: 0.8em; color: #555; margin-bottom: 5px;
+        display: flex; justify-content: space-between;
+    }
     .bar-container {
-        background-color: #e0e0e0; border-radius: 10px;
-        width: 100%; height: 18px; /* Un peu plus fin pour l'élégance */
-        margin-top: 2px; margin-bottom: 8px;
-        box-shadow: inset 0 1px 3px rgba(0,0,0,0.2); overflow: hidden;
+        background-color: #e9ecef; border-radius: 8px;
+        width: 100%; height: 16px; /* Hauteur fine et uniforme */
+        box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); overflow: hidden;
     }
     .bar-fill {
-        height: 100%; border-radius: 10px; transition: width 0.5s ease-in-out;
-        display: flex; align-items: center; justify-content: flex-end;
-        padding-right: 5px; color: white; font-size: 0.7em; font-weight: bold;
+        height: 100%; border-radius: 8px; transition: width 0.6s ease-in-out;
     }
-    .xp-fill { background-color: #8A2BE2; }
-    .mana-fill { background-color: #0056b3; }
-    .chaos-fill { background-color: #800000; }
+    .xp-fill { background: linear-gradient(90deg, #8A2BE2, #9e47ff); }
+    .mana-fill { background: linear-gradient(90deg, #0056b3, #007bff); }
+    .chaos-fill { background: linear-gradient(90deg, #800000, #a71d2a); }
 
     /* === UI GÉNÉRALE === */
     .section-header {
@@ -49,7 +52,7 @@ st.markdown("""
     }
     /* Boutons standards */
     .stButton>button {
-        width: 100%; min-height: 42px; /* Hauteur forcée pour uniformité */
+        width: 100%; min-height: 40px;
         border: 1px solid #bbb; border-radius: 6px;
         background-color: white; color: #333;
         font-weight: 600; text-transform: uppercase; font-size: 0.85em;
@@ -65,43 +68,44 @@ st.markdown("""
         padding: 15px; margin: 10px 0;
     }
 
-    /* === BOUTONS CUSTOM (RENT & SOBER) === */
-    /* Technique : on cible le bouton qui suit un span invisible spécifique */
+    /* === BOUTONS CUSTOM SPÉCIFIQUES === */
     
-    /* 1. Bouton URGENT (Rouge pulse) */
-    @keyframes pulse-red { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
-    .urgent-marker + div > button {
-        background: linear-gradient(135deg, #d9534f, #c9302c) !important;
-        color: white !important; border: 2px solid #a94442 !important;
-        font-weight: 900 !important; letter-spacing: 1px !important; font-size: 1em !important;
-        animation: pulse-red 1.5s infinite !important; height: 50px !important;
-    }
-    
-    /* 2. Bouton WARNING (Orange) */
-    .warning-marker + div > button {
-        background: linear-gradient(135deg, #f0ad4e, #ec971f) !important;
-        color: white !important; border: 2px solid #d58512 !important;
-        font-weight: 800 !important; font-size: 0.95em !important; height: 45px !important;
-    }
-    
-    /* 3. Bouton SOBRE (Annuler gris petit) */
-    .sober-marker + div > button {
-         background-color: transparent !important; color: #999 !important;
-         border: 1px solid #ddd !important; font-size: 0.75em !important; 
-         height: 30px !important; min-height: 30px !important; 
-         margin-top: -10px !important; /* Remonte un peu */
-    }
-    .sober-marker + div > button:hover {
-         background-color: #eee !important; color: #333 !important; border-color: #aaa !important;
+    /* 1. BOUTONS COMMUNICATIONS (Taille uniforme forcée) */
+    .comm-btn > div > div > button {
+        height: 45px !important; /* Hauteur fixe pour les 3 */
+        font-size: 0.8em !important;
     }
 
-    /* Bannière Loyer Payé (Non cliquable) */
+    /* 2. BOUTON ANNULER SOBRE (Petit, gris, minuscule) */
+    .sober-marker + div > button {
+         background-color: transparent !important; color: #888 !important;
+         border: 1px solid #ccc !important; font-size: 0.7em !important; 
+         height: 28px !important; min-height: 28px !important;
+         text-transform: none !important; /* Pas de majuscules */
+         padding: 0px !important; width: auto !important; padding-left: 10px !important; padding-right: 10px !important;
+         margin-top: 5px;
+    }
+    .sober-marker + div > button:hover { color: #333 !important; border-color: #888 !important; }
+
+    /* 3. BOUTONS LOYER URGENTS */
+    @keyframes pulse-red { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+    .urgent-marker + div > button {
+        background: linear-gradient(135deg, #d9534f, #c9302c) !important; color: white !important; border: none !important;
+        font-weight: 900 !important; letter-spacing: 1px !important; font-size: 1em !important;
+        animation: pulse-red 1.5s infinite !important; height: 55px !important;
+    }
+    .warning-marker + div > button {
+        background: linear-gradient(135deg, #f0ad4e, #ec971f) !important; color: white !important; border: none !important;
+        font-weight: 800 !important; height: 48px !important;
+    }
+
+    /* Bannière Loyer Payé */
     .rent-gold-banner {
         background: linear-gradient(135deg, #bf953f, #fcf6ba, #b38728, #fbf5b7);
         color: #5c4004; padding: 15px; text-align: center; border-radius: 8px;
         font-weight: 900; text-transform: uppercase; letter-spacing: 2px;
-        border: 2px solid #d4af37; box-shadow: 0 4px 6px rgba(0,0,0,0.15);
-        text-shadow: 1px 1px 0px rgba(255,255,255,0.2); margin-bottom: 10px;
+        border: 2px solid #d4af37; box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        text-shadow: 1px 1px 0px rgba(255,255,255,0.3);
     }
     </style>
     """, unsafe_allow_html=True)
@@ -110,8 +114,8 @@ st.markdown("""
 def draw_bar(label, value, color_class, max_val=100):
     pct = min(100, max(0, (value / max_val) * 100))
     st.markdown(f"""
-    <div style="margin-bottom: 2px; font-weight:bold; font-size:0.8em; color:#555;">
-        {label} <span style="float:right;">{int(value)}%</span>
+    <div class="bar-label">
+        <span>{label}</span><span>{int(value)}%</span>
     </div>
     <div class="bar-container">
         <div class="bar-fill {color_class}" style="width: {pct}%;"></div>
@@ -225,28 +229,37 @@ xp_needed = 100 - progress_pct
 current_month_name = MOIS_FR[datetime.now().month]
 
 # ==============================================================================
-# HEADER (HUD) ALIGNÉ
+# HUD HEADER (NOUVELLE STRUCTURE ALIGNÉE)
 # ==============================================================================
-c_av, c_main, c_sec = st.columns([0.12, 0.58, 0.3]) # Ratios ajustés pour l'alignement
+st.markdown('<div class="hud-box">', unsafe_allow_html=True)
 
-with c_av:
-    st.image("avatar.png", use_container_width=True)
+# Ligne 1 : Avatar et Titre
+c_head1, c_head2 = st.columns([0.1, 0.9])
+with c_head1:
+    st.image("avatar.png", width=80)
+with c_head2:
+    st.markdown(f"<h2 style='margin:0; border:none;'>NIVEAU {niveau} | SELECTA</h2>", unsafe_allow_html=True)
+    st.caption(f"Progression vers le niveau {niveau+1}")
 
-with c_main:
-    st.markdown(f"<h2 style='margin:0; padding:0;'>NIVEAU {niveau} | SELECTA</h2>", unsafe_allow_html=True)
-    st.caption(f"{xp_needed} XP requis pour le niveau suivant")
+st.write("") # Petit espace
+
+# Ligne 2 : Les 3 barres alignées parfaitement
+c_bar1, c_bar2, c_bar3 = st.columns(3, gap="medium")
+with c_bar1:
     draw_bar("EXPÉRIENCE", progress_pct, "xp-fill")
-
-with c_sec:
-    # L'alignement vertical est géré par le CSS flexbox sur les colonnes
+    st.caption(f"{xp_needed} XP requis")
+with c_bar2:
     draw_bar("MÉMOIRE (MANA)", current_mana, "mana-fill")
+    st.caption("État de vos connaissances")
+with c_bar3:
     draw_bar("CHAOS (ADMIN)", current_chaos, "chaos-fill")
+    st.caption("Niveau de désordre")
 
-st.write("---")
+st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ==============================================================================
-# CORPS DE PAGE (2 Colonnes)
+# CORPS DE PAGE
 # ==============================================================================
 col_left, col_right = st.columns([1, 1.2], gap="large")
 
@@ -275,42 +288,45 @@ with col_left:
     # 2. GESTION DU ROYAUME
     st.markdown('<div class="section-header">🛡️ GESTION DU ROYAUME</div>', unsafe_allow_html=True)
 
-    # A. LOYER (BOUTONS CUSTOMISÉS)
+    # A. LOYER
     st.markdown("**LOYER**")
     if rent_paid_status:
         st.markdown(f'<div class="rent-gold-banner">✨ LOYER {current_month_name} RÉGLÉ ✨</div>', unsafe_allow_html=True)
-        # Marqueur pour bouton sobre
+        # Marqueur pour bouton sobre et petit
         st.markdown('<span class="sober-marker"></span>', unsafe_allow_html=True)
-        if st.button("annuler paiement (erreur)", key="undo_rent"):
+        if st.button("↺ Annuler", key="undo_rent"):
              undo_rent_payment(); st.rerun()
     else:
         day = datetime.now().day
         if day >= 29:
-            # Marqueur Urgent (Rouge Pulse)
             st.markdown('<span class="urgent-marker"></span>', unsafe_allow_html=True)
             if st.button(f"⚠️ PAYER LOYER {current_month_name} !", key="rent_btn"): 
                 save_xp(50, "Gestion", "Loyer"); st.rerun()
         elif day >= 20:
-            # Marqueur Warning (Orange)
             st.markdown('<span class="warning-marker"></span>', unsafe_allow_html=True)
             if st.button(f"RAPPEL : LOYER {current_month_name}", key="rent_btn"):
                 save_xp(50, "Gestion", "Loyer"); st.rerun()
         else:
-            # Bouton Normal (Gris par défaut)
             if st.button(f"PAYER LOYER {current_month_name} (EN ATTENTE)", key="rent_btn"):
                 save_xp(50, "Gestion", "Loyer"); st.rerun()
 
     st.write("")
 
-    # B. COMMUNICATIONS (TAILLE UNIFORME VIA CSS)
+    # B. COMMUNICATIONS (BOUTONS UNIFORMES VIA CLASSE CSS 'comm-btn')
     st.markdown("**COMMUNICATIONS**")
     c_mail1, c_mail2, c_mail3 = st.columns(3)
     with c_mail1:
+        st.markdown('<div class="comm-btn">', unsafe_allow_html=True)
         if st.button("🧹 TRIER"): save_xp(5, "Gestion", "Tri Mails"); st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
     with c_mail2:
-        if st.button("✍️ REPONDRE"): save_xp(10, "Gestion", "Reponse Mails"); st.rerun()
+        st.markdown('<div class="comm-btn">', unsafe_allow_html=True)
+        if st.button("✍️ RÉPONDRE"): save_xp(10, "Gestion", "Reponse Mails"); st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
     with c_mail3:
+        st.markdown('<div class="comm-btn">', unsafe_allow_html=True)
         if st.button("📅 AGENDA"): save_xp(5, "Gestion", "Agenda"); st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     st.write("")
 
@@ -361,7 +377,6 @@ with col_right:
     with c_combat:
         st.caption("⚔️ **COMBAT (ANKI)**")
         if st.session_state['anki_start_time'] is None:
-            # Plus de st.info ici, juste du texte
             st.write("Prêt à réviser ?")
             if st.button("⚔️ LANCER LE COMBAT", type="primary"):
                 st.session_state['anki_start_time'] = datetime.now(); st.rerun()
@@ -410,7 +425,6 @@ with col_right:
         
         if st.session_state['gym_current_prog']:
             n, d = st.session_state['gym_current_prog']
-            # Plus de st.info ici, markdown simple
             st.markdown(f"**{n}**")
             for l in d.split('\n'): st.markdown(f"- {l}")
             
