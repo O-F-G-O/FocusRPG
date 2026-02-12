@@ -9,13 +9,13 @@ from datetime import datetime
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Selecta RPG", page_icon="🛡️", layout="wide")
 
-# --- CSS (CORRECTIFS V33 - FORMS & BOUTONS) ---
+# --- CSS (STYLE V33 - CLEAN & FORMS) ---
 st.markdown("""
     <style>
     /* Fond global */
     .stApp { background-color: #f4f6f9; color: #333; }
     
-    /* FIX TOP */
+    /* FIX TOP PADDING */
     .block-container { padding-top: 1.2rem !important; }
 
     /* === HEADER HUD === */
@@ -39,7 +39,7 @@ st.markdown("""
         border-bottom: 2px solid #ddd; padding-bottom: 5px; margin-bottom: 15px; margin-top: 20px;
     }
     
-    /* On applique le style à stButton ET stFormSubmitButton pour l'uniformité */
+    /* Style uniforme pour stButton et stFormSubmitButton */
     .stButton>button, .stFormSubmitButton>button {
         width: 100%; min-height: 40px; border: 1px solid #bbb; border-radius: 6px;
         background-color: white; color: #333; font-weight: 600; text-transform: uppercase; font-size: 0.85em; transition: all 0.2s;
@@ -197,19 +197,25 @@ xp_needed = 100 - progress_pct
 current_month_name = MOIS_FR[datetime.now().month]
 
 # ==============================================================================
-# HUD HEADER
+# HUD HEADER (CORRECTIF : 2 COLONNES HAUT, 3 COLONNES BAS)
 # ==============================================================================
 st.markdown('<div class="hud-box">', unsafe_allow_html=True)
-c_av, c_main, c_sec = st.columns([0.1, 0.9])
+
+# Ligne 1 : Avatar et Titre (2 colonnes seulement !)
+c_av, c_main = st.columns([0.1, 0.9])
 with c_av: st.image("avatar.png", width=80)
 with c_main:
     st.markdown(f"<h2 style='margin:0; border:none;'>NIVEAU {niveau} | SELECTA</h2>", unsafe_allow_html=True)
     st.caption(f"{xp_needed} XP requis pour le niveau suivant")
+
 st.write("") 
+
+# Ligne 2 : Les Barres (3 colonnes)
 c_bar1, c_bar2, c_bar3 = st.columns(3, gap="medium")
 with c_bar1: draw_bar("EXPÉRIENCE", progress_pct, "xp-fill")
 with c_bar2: draw_bar("MÉMOIRE (MANA)", current_mana, "mana-fill")
 with c_bar3: draw_bar("CHAOS (ADMIN)", current_chaos, "chaos-fill")
+
 st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
@@ -223,7 +229,6 @@ with col_left:
     st.markdown('<div class="section-header">📌 QUÊTES DU JOUR</div>', unsafe_allow_html=True)
     with st.form("task_form", clear_on_submit=True):
         new_t = st.text_input("Ajouter une tâche...", label_visibility="collapsed")
-        # Le bouton de submit aura le même style que les autres grâce au CSS
         submitted = st.form_submit_button("AJOUTER TÂCHE")
         if submitted and new_t:
             add_task(new_t, 1)
@@ -279,6 +284,7 @@ with col_left:
         else:
             if st.button(f"PAYER SALT {current_month_name} (EN ATTENTE)", key="salt_btn"): save_xp(25, "Gestion", "Facture: Salt"); st.rerun()
 
+
     st.write("")
 
     # C. COMMUNICATIONS
@@ -299,14 +305,13 @@ with col_left:
 
     st.write("")
 
-    # D. AUTRES FACTURES (FORMULAIRE AUSSI)
+    # D. AUTRES FACTURES (FORMULAIRE)
     st.markdown("**AUTRES FACTURES**")
     with st.form("bills_form", clear_on_submit=True):
         c_fac1, c_fac2 = st.columns([0.7, 0.3])
         with c_fac1: facture_name = st.text_input("Nom facture...", label_visibility="collapsed")
         with c_fac2: 
-            submitted_bill = st.form_submit_button("PAYER")
-            if submitted_bill and facture_name:
+            if st.form_submit_button("PAYER") and facture_name:
                 save_xp(15, "Gestion", f"Facture: {facture_name}")
                 st.toast("Payé !"); time.sleep(1); st.rerun()
 
@@ -324,11 +329,11 @@ with col_right:
                     if l.strip(): add_task(l.strip(), 2)
                 st.rerun()
         
-        # Formulaire pour ajouter cours (Nettoie l'input)
+        # Formulaire cours
         with st.form("anki_form", clear_on_submit=True):
             new_anki = st.text_input("Ajouter cours...", label_visibility="collapsed")
-            if st.form_submit_button("AJOUTER"):
-                if new_anki: add_task(new_anki, 2); st.rerun()
+            if st.form_submit_button("AJOUTER") and new_anki:
+                add_task(new_anki, 2); st.rerun()
 
         anki_tasks = load_tasks(2)
         if not anki_tasks: st.caption("_Grimoire vide._")
