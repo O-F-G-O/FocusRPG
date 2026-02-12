@@ -35,20 +35,23 @@ st.markdown("""
         font-weight: 900; font-size: 1.1em;
     }
     
-    /* Boite spéciale pour la liste Anki */
-    .anki-box {
-        background-color: #fff;
-        border: 1px dashed #333;
-        padding: 10px;
-        border-radius: 4px;
+    /* Timer Display */
+    .timer-box {
+        font-family: monospace;
+        font-size: 1.2em;
+        font-weight: bold;
+        text-align: center;
+        margin: 10px 0;
+        color: #d9534f; /* Rouge légère pour le mode combat */
     }
     </style>
     """, unsafe_allow_html=True)
 
 # --- INIT SESSION ---
 if 'gym_current_prog' not in st.session_state: st.session_state['gym_current_prog'] = None
+if 'anki_start_time' not in st.session_state: st.session_state['anki_start_time'] = None
 
-# --- G-SHEETS (LOGIQUE À 2 COLONNES) ---
+# --- G-SHEETS ---
 def get_db():
     secrets = st.secrets["connections"]["gsheets"]
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -56,43 +59,23 @@ def get_db():
     client = gspread.authorize(creds)
     return client.open_by_url(secrets["spreadsheet"])
 
-# --- GESTION TÂCHES PERSO (COLONNE 1) ---
-def load_tasks():
-    try: return get_db().worksheet("Tasks").col_values(1)[1:] # Colonne A
+# --- GESTION TÂCHES (PERSO & ANKI) ---
+def load_tasks(col_idx):
+    try: return get_db().worksheet("Tasks").col_values(col_idx)[1:] 
     except: return []
 
-def add_task(t): 
+def add_task(t, col_idx): 
     try: 
         ws = get_db().worksheet("Tasks")
-        # On trouve la première ligne vide de la Col A
-        col_values = ws.col_values(1)
-        ws.update_cell(len(col_values) + 1, 1, t)
+        col_vals = ws.col_values(col_idx)
+        ws.update_cell(len(col_vals) + 1, col_idx, t)
     except: pass
 
-def del_task(t):
+def del_task(t, col_idx):
     try: 
         ws = get_db().worksheet("Tasks")
-        cell = ws.find(t, in_column=1)
-        ws.update_cell(cell.row, 1, "") # On efface juste le contenu pour pas décaler la col B
-    except: pass
-
-# --- GESTION COURS ANKI (COLONNE 2) ---
-def load_anki_tasks():
-    try: return get_db().worksheet("Tasks").col_values(2)[1:] # Colonne B
-    except: return []
-
-def add_anki_task(t): 
-    try: 
-        ws = get_db().worksheet("Tasks")
-        col_values = ws.col_values(2)
-        ws.update_cell(len(col_values) + 1, 2, t)
-    except: pass
-
-def del_anki_task(t):
-    try: 
-        ws = get_db().worksheet("Tasks")
-        cell = ws.find(t, in_column=2)
-        ws.update_cell(cell.row, 2, "") 
+        cell = ws.find(t, in_column=col_idx)
+        ws.update_cell(cell.row, col_idx, "") 
     except: pass
 
 # --- XP SYSTEM ---
@@ -109,14 +92,13 @@ def get_stats():
         
         xp = int(pd.to_numeric(df["XP"], errors='coerce').sum())
         
-        # MANA CALCUL (Basé sur dernière session 'COMBAT')
+        # MANA CALCUL
         anki_logs = df[df['Commentaire'].str.contains("Combat", case=False, na=False)]
-        
         if anki_logs.empty: mana = 50 
         else:
             last_date = datetime.strptime(anki_logs.iloc[-1]['Date'], "%Y-%m-%d %H:%M")
             days_diff = (datetime.now() - last_date).days
-            mana = max(0, 100 - (days_diff * 15)) 
+            mana = max(0, 100 - (days_diff * 10)) # -10% par jour
             
         return xp, mana
     except: return 0, 50
@@ -158,20 +140,20 @@ with col_left:
     
     new_t = st.text_input("Tâche perso...", label_visibility="collapsed")
     if st.button("AJOUTER TÂCHE"):
-        if new_t: add_task(new_t); st.rerun()
+        if new_t: add_task(new_t, 1); st.rerun()
     
     st.write("")
-    tasks = load_tasks()
+    tasks = load_tasks(1) # Colonne 1
     for i, t in enumerate(tasks):
-        if t: # On n'affiche pas les cellules vides
+        if t: 
             c1, c2, c3 = st.columns([0.7, 0.15, 0.15])
             with c1: st.text(t)
             with c2: 
                 if st.button("✓", key=f"vp_{i}"):
-                    save_xp(5, "Gestion", t); del_task(t); st.rerun()
+                    save_xp(5, "Gestion", t); del_task(t, 1); st.rerun()
             with c3:
                 if st.button("×", key=f"xp_{i}"):
-                    del_task(t); st.rerun()
+                    del_task(t, 1); st.rerun()
 
 # === DROITE : SPORT & ETUDES ===
 with col_right:
@@ -181,56 +163,88 @@ with col_right:
     
     c_create, c_combat = st.columns(2, gap="medium")
     
-    # COLONNE CRÉATION (Liste des cours)
+    # COLONNE CRÉATION
     with c_create:
-        st.caption("📜 **BACKLOG DES COURS À FICHER**")
+        st.caption("📜 **BACKLOG**")
         
-        # Import Fichier
-        with st.expander("📥 IMPORTER LISTE (TXT)"):
+        # Import
+        with st.expander("📥 IMPORTER (TXT)"):
             uploaded_file = st.file_uploader("Un cours par ligne", type="txt")
-            if uploaded_file and st.button("IMPORTER DANS LE GRIMOIRE"):
+            if uploaded_file and st.button("IMPORTER"):
                 stringio = uploaded_file.getvalue().decode("utf-8")
                 count = 0
                 for line in stringio.splitlines():
-                    if line.strip(): add_anki_task(line.strip()); count += 1
-                st.success(f"{count} cours ajoutés !")
+                    if line.strip(): add_task(line.strip(), 2); count += 1 # Colonne 2 pour Anki
+                st.success(f"{count} ajoutés !")
                 time.sleep(1); st.rerun()
         
         # Ajout Manuel
         new_anki = st.text_input("Nouveau cours...", label_visibility="collapsed", key="anki_input")
-        if st.button("AJOUTER AU GRIMOIRE"):
-            if new_anki: add_anki_task(new_anki); st.rerun()
+        if st.button("AJOUTER AU BACKLOG"):
+            if new_anki: add_task(new_anki, 2); st.rerun()
 
         # Liste des Cours
         st.write("")
-        anki_tasks = load_anki_tasks()
+        anki_tasks = load_tasks(2)
         if not anki_tasks or all(x == "" for x in anki_tasks):
-            st.info("Aucun cours en attente.")
+            st.caption("_Aucun cours en attente._") # Texte discret au lieu de la boite bleue
         else:
             for i, t in enumerate(anki_tasks):
                 if t:
                     c1, c2 = st.columns([0.8, 0.2])
                     c1.markdown(f"**{t}**")
-                    # Ici on valide la CREATION
-                    if c2.button("✓", key=f"va_{i}", help="J'ai fini de ficher ce cours"):
+                    if c2.button("✓", key=f"va_{i}", help="Ficher ce cours"):
                         save_xp(30, "Intellect", f"Création: {t}")
-                        del_anki_task(t)
+                        del_task(t, 2)
                         st.rerun()
 
-    # COLONNE COMBAT (Révision)
+    # COLONNE COMBAT (TIMER)
     with c_combat:
         st.caption("⚔️ **CHAMP DE BATAILLE**")
-        st.info(f"Mana actuel : **{current_mana}%**")
         
-        st.markdown("""
-        <div style="text-align:center; margin-bottom:10px; color:#555; font-size:0.8em;">
-        Lance Anki et bats-toi contre l'oubli.
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if st.button("LANCER LE COMBAT (+20 XP)"):
-            save_xp(20, "Intellect", "Combat Anki")
-            st.rerun()
+        # LOGIQUE DU TIMER
+        if st.session_state['anki_start_time'] is None:
+            # ETAT : PAS DE SESSION
+            st.write("") # Espace
+            st.markdown("Prêt à réviser ?")
+            if st.button("⚔️ COMMENCER LE COMBAT"):
+                st.session_state['anki_start_time'] = datetime.now()
+                st.rerun()
+        else:
+            # ETAT : SESSION EN COURS
+            start_t = st.session_state['anki_start_time']
+            # On calcule la durée juste pour l'affichage (approximatif car statique jusqu'au rerun)
+            delta = datetime.now() - start_t
+            minutes = int(delta.total_seconds() // 60)
+            
+            st.markdown(f"""
+            <div class="timer-box">
+                EN COMBAT DEPUIS<br>
+                {start_t.strftime('%H:%M')}
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.caption("Concentre-toi. Ne lâche rien.")
+            
+            if st.button("🏁 TERMINER & RÉCOLTER XP"):
+                end_t = datetime.now()
+                duration = end_t - start_t
+                minutes_total = int(duration.total_seconds() // 60)
+                
+                # Minimum 1 XP même si moins d'une minute
+                xp_gain = max(1, minutes_total) 
+                
+                # Bonus si session longue (> 25 min)
+                bonus_msg = ""
+                if minutes_total >= 25:
+                    xp_gain += 5
+                    bonus_msg = " (+5 Bonus Focus)"
+                
+                save_xp(xp_gain, "Intellect", f"Combat Anki ({minutes_total} min)")
+                st.session_state['anki_start_time'] = None # Reset
+                st.toast(f"Combat terminé ! +{xp_gain} XP{bonus_msg}")
+                time.sleep(2)
+                st.rerun()
 
     st.write("---")
 
