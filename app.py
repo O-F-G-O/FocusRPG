@@ -4,8 +4,9 @@ import gspread
 import time
 import random
 import streamlit.components.v1 as components
+import urllib.parse
 from google.oauth2.service_account import Credentials
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Selecta RPG", page_icon="🛡️", layout="wide")
@@ -24,18 +25,15 @@ components.html(
     </script>""", height=0
 )
 
-# --- CSS (V42 - CLEAN & ÉQUILIBRÉ) ---
+# --- CSS (V43 - RESTAURATION CALENDRIER & CLEAN) ---
 st.markdown("""
     <style>
-    /* SUPPRESSION HEADER */
     header { display: none !important; }
     [data-testid="stHeader"] { display: none !important; }
     .block-container { padding-top: 1rem !important; margin-top: -2rem !important; }
     
-    /* Fond global */
     .stApp { background-color: #f4f6f9; color: #333; }
 
-    /* === BARRES === */
     .bar-label { font-weight: 700; font-size: 0.8em; color: #555; margin-bottom: 5px; display: flex; justify-content: space-between; }
     .bar-container { background-color: #e9ecef; border-radius: 8px; width: 100%; height: 16px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); overflow: hidden; }
     .bar-fill { height: 100%; border-radius: 8px; transition: width 0.6s ease-in-out; }
@@ -43,7 +41,6 @@ st.markdown("""
     .mana-fill { background: linear-gradient(90deg, #0056b3, #007bff); }
     .chaos-fill { background: linear-gradient(90deg, #800000, #a71d2a); }
 
-    /* === UI === */
     .section-header { font-size: 1.1em; font-weight: 800; text-transform: uppercase; color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; margin-bottom: 15px; margin-top: 20px; }
     
     .stButton>button, .stFormSubmitButton>button {
@@ -54,7 +51,6 @@ st.markdown("""
     
     .timer-box { font-family: 'Courier New', monospace; font-size: 2.2em; font-weight: bold; color: #d9534f; text-align: center; background-color: #fff; border: 2px solid #d9534f; border-radius: 8px; padding: 15px; margin: 10px 0; }
 
-    /* === MOBILE === */
     @media (max-width: 768px) {
         .bar-label { font-size: 0.65em; }
         .bar-container { height: 12px; }
@@ -62,7 +58,6 @@ st.markdown("""
         .stButton button { font-size: 0.75em !important; padding: 0px !important; }
     }
 
-    /* === SPECIAL === */
     .comm-btn > div > div > button { height: 45px !important; }
     @keyframes pulse-red { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
     .urgent-marker + div > button { background: linear-gradient(135deg, #d9534f, #c9302c) !important; color: white !important; animation: pulse-red 1.5s infinite !important; height: 55px !important; border: none !important; }
@@ -72,6 +67,15 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# --- FONCTION LIEN GOOGLE AGENDA ---
+def create_cal_link(title, details=""):
+    base = "https://www.google.com/calendar/render?action=TEMPLATE"
+    now = datetime.now() + timedelta(days=1)
+    start = now.replace(hour=10, minute=0, second=0).strftime('%Y%m%dT%H%M00')
+    end = now.replace(hour=11, minute=0, second=0).strftime('%Y%m%dT%H%M00')
+    params = {"text": f"[RPG] {title}", "details": details, "dates": f"{start}/{end}"}
+    return f"{base}&{urllib.parse.urlencode(params)}"
+
 # --- ENGINE ---
 def get_db():
     secrets = st.secrets["connections"]["gsheets"]
@@ -80,23 +84,20 @@ def get_db():
 
 def load_tasks_v2(col_idx):
     try:
-        ws = get_db().worksheet("Tasks")
-        data = ws.get_all_values()
+        ws = get_db().worksheet("Tasks"); data = ws.get_all_values()
         if not data or len(data) < 2: return []
         return [row[col_idx-1] for row in data[1:] if len(row) >= col_idx and row[col_idx-1].strip() != ""]
     except: return []
 
 def add_task(t, col_idx):
     try:
-        ws = get_db().worksheet("Tasks")
-        col_vals = ws.col_values(col_idx)
+        ws = get_db().worksheet("Tasks"); col_vals = ws.col_values(col_idx)
         ws.update_cell(len(col_vals) + 1, col_idx, t)
     except: st.error("Erreur GSheets")
 
 def del_task(t, col_idx):
     try:
-        ws = get_db().worksheet("Tasks")
-        cell = ws.find(t, in_column=col_idx)
+        ws = get_db().worksheet("Tasks"); cell = ws.find(t, in_column=col_idx)
         ws.update_cell(cell.row, col_idx, "")
     except: pass
 
@@ -108,14 +109,10 @@ def save_xp(amt, type_s, cmt=""):
 
 def undo_payment(keyword):
     try:
-        ws = get_db().worksheet("Data")
-        current_month = datetime.now().strftime("%Y-%m")
+        ws = get_db().worksheet("Data"); current_month = datetime.now().strftime("%Y-%m")
         df = pd.DataFrame(ws.get_all_records())
         mask = df['Date'].astype(str).str.contains(current_month) & df['Commentaire'].astype(str).str.contains(keyword)
-        if mask.any():
-            ws.delete_rows(int(df[mask].index[-1] + 2))
-            st.toast("Annulé.")
-            return True
+        if mask.any(): ws.delete_rows(int(df[mask].index[-1] + 2)); st.toast("Annulé."); return True
     except: pass
     return False
 
@@ -182,11 +179,13 @@ if st.session_state['current_page'] == "Dashboard":
             nt = st.text_input("Quête...", label_visibility="collapsed")
             if st.form_submit_button("AJOUTER TÂCHE") and nt: add_task(nt, 1); st.rerun()
         
+        # RESTAURATION BOUTON CALENDRIER INDIVIDUEL
         for i, t in enumerate(load_tasks_v2(1)):
-            cl1, cl2, cl3 = st.columns([0.75, 0.12, 0.13])
+            cl1, cl2, cl3, cl4 = st.columns([0.65, 0.12, 0.12, 0.11])
             cl1.write(f"• {t}")
-            if cl2.button("✓", key=f"q_{i}"): save_xp(10, "Gestion", t); del_task(t, 1); st.rerun()
-            if cl3.button("×", key=f"d_{i}"): del_task(t, 1); st.rerun()
+            cl2.link_button("📅", create_cal_link(t), help="Planifier dans l'agenda")
+            if cl3.button("✓", key=f"q_{i}"): save_xp(10, "Gestion", t); del_task(t, 1); st.rerun()
+            if cl4.button("×", key=f"d_{i}"): del_task(t, 1); st.rerun()
 
         st.markdown('<div class="section-header">🛡️ GESTION DU ROYAUME</div>', unsafe_allow_html=True)
         st.markdown("**LOYER**")
