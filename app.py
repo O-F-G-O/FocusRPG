@@ -9,7 +9,7 @@ from datetime import datetime
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Selecta RPG", page_icon="🛡️", layout="wide")
 
-# --- CSS (STYLE ÉPURÉ) ---
+# --- CSS (STYLE ÉPURÉ & SOBRE) ---
 st.markdown("""
     <style>
     .stApp { background-color: #F8F9FA; color: #333; }
@@ -17,19 +17,23 @@ st.markdown("""
     /* Avatar Header */
     img.avatar-small { border-radius: 8px; border: 2px solid #333; }
     
-    /* Boutons Outline */
+    /* Boutons Outline Sobres (Noir & Blanc) */
     .stButton>button {
         width: 100%;
-        border: 2px solid #333;
+        border: 1px solid #333; /* Bordure plus fine */
         border-radius: 4px;
-        background-color: white;
+        background-color: transparent; /* Fond transparent */
         color: #333;
-        font-weight: 700;
+        font-weight: 600;
         text-transform: uppercase;
         font-size: 0.85em;
-        margin-top: 5px;
+        margin-top: 0px;
     }
-    .stButton>button:hover { background-color: #333; color: white; }
+    .stButton>button:hover {
+        background-color: #333; 
+        color: white;
+        border-color: #333;
+    }
 
     /* Headers */
     .section-header {
@@ -38,18 +42,16 @@ st.markdown("""
         font-weight: 900; letter-spacing: -0.5px; font-size: 1.1em;
     }
     
-    /* Boite programme propre */
-    .gym-box {
-        background-color: #E8F0FE;
-        border-left: 4px solid #333;
-        padding: 15px;
-        border-radius: 4px;
-        margin-bottom: 10px;
+    /* Alignement vertical dans les colonnes */
+    div[data-testid="column"] {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- INIT SESSION STATE (POUR GARDER LE PROGRAMME ALEATOIRE) ---
+# --- INIT SESSION STATE ---
 if 'gym_current_prog' not in st.session_state:
     st.session_state['gym_current_prog'] = None
 
@@ -76,7 +78,7 @@ def del_task(t):
 def save_xp(amt, type_s, cmt=""):
     try:
         get_db().worksheet("Data").append_row([datetime.now().strftime("%Y-%m-%d %H:%M"), type_s, amt, cmt])
-        st.toast(f"+{amt} XP ! 🔥")
+        st.toast(f"+{amt} XP")
     except: st.error("Erreur Save")
 
 def get_stats():
@@ -88,14 +90,14 @@ def get_stats():
 
 # --- DATA SPORT : 8 PROGRAMMES FULL BODY ---
 FULL_BODY_PROGRAMS = {
-    "FB1. STRENGTH FOUNDATION (Lourd)": "SQUAT BARRE : 3 x 5 (Repos 3min)\nDEVELOPPÉ COUCHÉ : 3 x 5 (Repos 3min)\nROWING BARRE (Pendlay) : 3 x 6 (Repos 2min)\nSOULEVÉ DE TERRE ROUMAIN : 3 x 8 (Repos 2min)\nGAINAGE PLANCHE : 3 x 1min",
-    "FB2. HYPERTROPHY MACHINES (Volume)": "PRESSE À CUISSES : 3 x 12 (Repos 90s)\nTIRAGE POULIE HAUTE : 3 x 12 (Repos 90s)\nCHEST PRESS MACHINE : 3 x 12 (Repos 90s)\nLEG CURL ASSIS : 3 x 15 (Repos 60s)\nELEVATIONS LATERALES MACHINE : 3 x 15 (Repos 60s)",
-    "FB3. ATHLETIC & POWER": "POWER CLEAN (Épaulé) : 5 x 3 (Repos 2min)\nFENTES SAUTÉES : 3 x 8/jambe (Repos 90s)\nTRACTIONS (ou assistées) : 4 x MAX (Repos 90s)\nDIPS (ou assistés) : 4 x MAX (Repos 90s)\nKETTLEBELL SWING : 3 x 20 (Repos 60s)",
-    "FB4. DUMBBELL ONLY (Haltères)": "GOBLET SQUAT HALTERE : 4 x 10 (Repos 90s)\nDEVELOPPÉ HALTERES INCLINÉ : 3 x 10 (Repos 90s)\nROWING HALTERE UNILATERAL : 3 x 12/bras (Repos 60s)\nFENTES ARRIERES HALTERES : 3 x 10/jambe (Repos 90s)\nCURL MARTEAU + EXT TRICEPS HALTERE : 3 x 12 (Super-set, Repos 60s)",
-    "FB5. POSTERIOR CHAIN FOCUS (Dos/Ischios)": "SOULEVÉ DE TERRE CLASSIQUE : 3 x 5 (Repos 3min)\nTRACTIONS PRISE NEUTRE : 3 x 8 (Repos 2min)\nHIP THRUST BARRE : 3 x 10 (Repos 2min)\nINVERTED ROW (Poids du corps) : 3 x 12 (Repos 90s)\nFACE PULLS POULIE : 3 x 15 (Repos 60s)",
-    "FB6. ANTERIOR FOCUS (Quad/Pecs)": "FRONT SQUAT (ou Goblet lourd) : 3 x 8 (Repos 2min)\nDEVELOPPÉ MILITAIRE DEBOUT : 3 x 8 (Repos 2min)\nFENTES BULGARES : 3 x 10/jambe (Repos 90s)\nPOMPES LESTÉES (ou machine pecs) : 3 x 12 (Repos 90s)\nAB WHEEL (Roulette abdos) : 3 x 10 (Repos 90s)",
-    "FB7. METABOLIC CIRCUIT (Intensité)": "Circuit - 4 tours - 60s repos :\nTHRUSTERS (Haltères) x 10\nRENEGADE ROW x 8/bras\nMOUNTAIN CLIMBERS x 20/jambe\nPUSH-UPS x MAX\nJUMP SQUATS x 15",
-    "FB8. 'THE GRIND' (Densité)": "SQUAT : 10min AMRAP (10RM)\nRepos 5min\nBENCH PRESS : 10min AMRAP (10RM)\nRepos 5min\nTRACTIONS : 10min AMRAP (Poids du corps)"
+    "FB1. STRENGTH FOUNDATION": "SQUAT BARRE : 3 x 5 (Repos 3min)\nDEVELOPPÉ COUCHÉ : 3 x 5 (Repos 3min)\nROWING BARRE : 3 x 6 (Repos 2min)\nSOULEVÉ DE TERRE ROUMAIN : 3 x 8 (Repos 2min)\nGAINAGE PLANCHE : 3 x 1min",
+    "FB2. HYPERTROPHY MACHINES": "PRESSE À CUISSES : 3 x 12 (Repos 90s)\nTIRAGE POULIE HAUTE : 3 x 12 (Repos 90s)\nCHEST PRESS MACHINE : 3 x 12 (Repos 90s)\nLEG CURL ASSIS : 3 x 15 (Repos 60s)\nELEVATIONS LATERALES : 3 x 15 (Repos 60s)",
+    "FB3. ATHLETIC & POWER": "POWER CLEAN : 5 x 3 (Repos 2min)\nFENTES SAUTÉES : 3 x 8/jambe (Repos 90s)\nTRACTIONS : 4 x MAX (Repos 90s)\nDIPS : 4 x MAX (Repos 90s)\nKETTLEBELL SWING : 3 x 20 (Repos 60s)",
+    "FB4. DUMBBELL ONLY": "GOBLET SQUAT : 4 x 10 (Repos 90s)\nDEVELOPPÉ HALTERES INCLINÉ : 3 x 10 (Repos 90s)\nROWING HALTERE : 3 x 12/bras (Repos 60s)\nFENTES ARRIERES : 3 x 10/jambe (Repos 90s)\nCURL + TRICEPS HALTERE : 3 x 12 (Super-set)",
+    "FB5. POSTERIOR CHAIN": "SOULEVÉ DE TERRE : 3 x 5 (Repos 3min)\nTRACTIONS NEUTRES : 3 x 8 (Repos 2min)\nHIP THRUST : 3 x 10 (Repos 2min)\nINVERTED ROW : 3 x 12 (Repos 90s)\nFACE PULLS : 3 x 15 (Repos 60s)",
+    "FB6. ANTERIOR FOCUS": "FRONT SQUAT : 3 x 8 (Repos 2min)\nDEVELOPPÉ MILITAIRE : 3 x 8 (Repos 2min)\nFENTES BULGARES : 3 x 10/jambe (Repos 90s)\nPOMPES LESTÉES : 3 x 12 (Repos 90s)\nAB WHEEL : 3 x 10 (Repos 90s)",
+    "FB7. METABOLIC CIRCUIT": "Circuit - 4 tours - 60s repos :\nTHRUSTERS x 10\nRENEGADE ROW x 8/bras\nMOUNTAIN CLIMBERS x 20/jambe\nPUSH-UPS x MAX\nJUMP SQUATS x 15",
+    "FB8. THE GRIND (DENSITÉ)": "SQUAT : 10min AMRAP (10RM)\nRepos 5min\nBENCH PRESS : 10min AMRAP (10RM)\nRepos 5min\nTRACTIONS : 10min AMRAP"
 }
 
 # --- LOGIQUE ---
@@ -128,17 +130,25 @@ with col_left:
     st.write("")
     tasks = load_tasks()
     for i, t in enumerate(tasks):
-        c1, c2, c3 = st.columns([0.7, 0.2, 0.1])
-        c1.text(t)
-        if c2.button("✓", key=f"v_{i}"):
-            save_xp(10, "Gestion", t); del_task(t); st.rerun()
-        if c3.button("×", key=f"x_{i}"):
-            del_task(t); st.rerun()
+        # CORRECTION ALIGNEMENT : 0.7 texte, 0.15 valider, 0.15 supprimer
+        # Cela donne une taille égale aux deux boutons pour qu'ils s'alignent bien
+        c1, c2, c3 = st.columns([0.7, 0.15, 0.15])
+        
+        with c1: 
+            st.text(t)
+        with c2: 
+            # Bouton sobre "✓"
+            if st.button("✓", key=f"v_{i}"):
+                save_xp(10, "Gestion", t); del_task(t); st.rerun()
+        with c3:
+            # Bouton sobre "×"
+            if st.button("×", key=f"x_{i}"):
+                del_task(t); st.rerun()
 
 # DROITE : ACTIONS
 with col_right:
     
-    # --- SECTION SPORT REVUE ---
+    # --- SECTION SPORT ---
     st.markdown('<p class="section-header">⚡ 01. SPORT (FULL BODY)</p>', unsafe_allow_html=True)
     
     c_home, c_gym = st.columns(2, gap="medium")
@@ -153,36 +163,28 @@ with col_right:
                 ph.markdown(f'<h2 style="text-align:center;">{m:02d}:{sec:02d}</h2>', unsafe_allow_html=True)
                 time.sleep(1)
         
-        st.write("") # Espace
-        if st.button("✅ VALIDER MAISON (+20 XP)"):
+        st.write("") 
+        if st.button("VALIDER MAISON (+20 XP)"):
             save_xp(20, "Force", "Maison"); st.rerun()
 
     # COLONNE 2 : SALLE
     with c_gym:
         st.markdown("##### 🏋️ SALLE")
         
-        # Bouton Générateur
         if st.button("🎲 GÉNÉRER PROGRAMME"):
             prog_name, prog_details = random.choice(list(FULL_BODY_PROGRAMS.items()))
             st.session_state['gym_current_prog'] = (prog_name, prog_details)
-            st.rerun() # Refresh pour afficher
+            st.rerun() 
 
-        # Affichage du programme tiré au sort (Clean Display)
         if st.session_state['gym_current_prog']:
             name, details = st.session_state['gym_current_prog']
             
-            # Affichage stylisé
-            st.markdown(f"**🔥 {name}**")
-            
-            # On découpe le texte pour faire une liste propre
-            lignes = details.split('\n')
-            clean_text = ""
-            for l in lignes:
-                clean_text += f"- {l}\n"
-            
-            st.markdown(clean_text) # Affiche une vraie liste à puces
+            st.markdown(f"**{name}**")
+            # Liste à puces propre
+            for l in details.split('\n'):
+                st.markdown(f"- {l}")
 
-            if st.button("✅ VALIDER SALLE (+50 XP)"):
+            if st.button("VALIDER SALLE (+50 XP)"):
                 save_xp(50, "Force", f"FB: {name}"); st.session_state['gym_current_prog'] = None; st.rerun()
         else:
             st.info("Clique sur le dé pour tirer une séance.")
