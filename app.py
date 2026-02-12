@@ -9,17 +9,17 @@ from datetime import datetime
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Selecta RPG", page_icon="🛡️", layout="wide")
 
-# --- CSS ---
+# --- CSS AVANCÉ (ANIMATIONS & COULEURS) ---
 st.markdown("""
     <style>
     .stApp { background-color: #F8F9FA; color: #333; }
     
-    /* Barres */
+    /* Barres de progression */
     .stProgress > div > div > div > div { background-color: #333; } 
-    .mana-bar .stProgress > div > div > div > div { background-color: #00A8E8 !important; } /* Mana */
-    .chaos-bar .stProgress > div > div > div > div { background-color: #D9534F !important; } /* Chaos */
+    .mana-bar .stProgress > div > div > div > div { background-color: #00A8E8 !important; }
+    .chaos-bar .stProgress > div > div > div > div { background-color: #D9534F !important; }
 
-    /* Boutons */
+    /* Boutons standards */
     .stButton>button {
         width: 100%; min-height: 38px;
         border: 1px solid #333; border-radius: 4px;
@@ -29,25 +29,47 @@ st.markdown("""
     }
     .stButton>button:hover { background-color: #333; color: white; }
     
-    /* Bouton Loyer Payé (Vert) */
+    /* === LOYER : STYLES DYNAMIQUES === */
+    
+    /* 1. Loyer Payé (Vert Zen) */
     .rent-paid {
         background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;
-        padding: 10px; text-align: center; border-radius: 4px; font-weight: bold;
+        padding: 15px; text-align: center; border-radius: 4px; font-weight: 800;
+        text-transform: uppercase; letter-spacing: 1px;
     }
 
+    /* 2. Loyer Critique (Animation Pulse Rouge) */
+    @keyframes pulse-red {
+        0% { box-shadow: 0 0 0 0 rgba(217, 83, 79, 0.7); transform: scale(1); }
+        70% { box-shadow: 0 0 0 10px rgba(217, 83, 79, 0); transform: scale(1.02); }
+        100% { box-shadow: 0 0 0 0 rgba(217, 83, 79, 0); transform: scale(1); }
+    }
+    
+    /* On cible le bouton spécifique du loyer critique via CSS hack si besoin, 
+       mais ici on utilisera une classe markdown pour l'alerte visuelle */
+    .critical-alert {
+        animation: pulse-red 2s infinite;
+        background-color: #D9534F; color: white;
+        padding: 10px; border-radius: 4px; text-align: center; font-weight: bold;
+        margin-bottom: 5px; border: 2px solid #c9302c;
+    }
+    
+    .rent-warning { color: #f0ad4e; font-weight: bold; }
+    .rent-danger { color: #d9534f; font-weight: bold; }
+
+    /* Headers */
     .section-header {
         border-bottom: 2px solid #333;
         padding-bottom: 5px; margin-bottom: 15px;
         font-weight: 900; font-size: 1.1em;
     }
     
+    /* Timer Anki */
     .timer-display {
         font-family: 'Courier New', monospace; font-size: 2em; font-weight: bold;
         color: #d9534f; text-align: center; border: 2px solid #d9534f;
         border-radius: 5px; padding: 10px; margin: 10px 0; background-color: #fff5f5;
     }
-    
-    .chaos-text { color: #D9534F; font-weight: bold; font-size: 0.9em; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -91,11 +113,11 @@ def save_xp(amt, type_s, cmt=""):
     except: st.error("Erreur Save")
 
 def check_rent_paid(df):
-    # Vérifie si "Loyer" apparait dans les commentaires du mois courant
+    # Logique de renouvellement : On checke uniquement le mois courant (ex: "2023-10")
     try:
         current_month = datetime.now().strftime("%Y-%m")
-        # On filtre les lignes qui contiennent la date du mois ET le mot "Loyer"
-        # Attention : format date YYYY-MM-DD HH:MM
+        # Si on trouve "Loyer" avec la date du mois courant, c'est payé.
+        # Le mois prochain, la date changera, donc ça retournera False -> Reset auto.
         rent_logs = df[df['Date'].str.contains(current_month, na=False) & df['Commentaire'].str.contains("Loyer", case=False, na=False)]
         return not rent_logs.empty
     except: return False
@@ -105,10 +127,10 @@ def get_stats():
         df = pd.DataFrame(get_db().worksheet("Data").get_all_records())
         if df.empty: return 0, 100, 0, False
         
-        # 1. XP
+        # XP
         xp = int(pd.to_numeric(df["XP"], errors='coerce').sum())
         
-        # 2. MANA (Anki)
+        # MANA
         anki_logs = df[df['Commentaire'].str.contains("Combat", case=False, na=False)]
         if anki_logs.empty: mana = 50 
         else:
@@ -116,17 +138,14 @@ def get_stats():
             days_anki = (datetime.now() - last_anki).days
             mana = max(0, 100 - (days_anki * 10))
         
-        # 3. CHAOS (Admin)
-        # On cherche logs de Gestion. 
+        # CHAOS (3% par jour)
         admin_logs = df[df['Type'].str.contains("Gestion", case=False, na=False)]
         if admin_logs.empty: chaos = 20
         else:
             last_admin = datetime.strptime(admin_logs.iloc[-1]['Date'], "%Y-%m-%d %H:%M")
             days_admin = (datetime.now() - last_admin).days
-            # CORRECTION : Seulement 3% par jour. Faut 1 mois pour être dans la merde.
             chaos = min(100, days_admin * 3) 
             
-        # 4. Check Loyer
         is_rent_paid = check_rent_paid(df)
             
         return xp, mana, chaos, is_rent_paid
@@ -158,12 +177,12 @@ with c_infos:
     
     cm1, cm2 = st.columns(2)
     with cm1:
-        st.caption(f"**MÉMOIRE (MANA) : {current_mana}%**")
+        st.caption(f"**MÉMOIRE : {current_mana}%**")
         st.markdown(f'<div class="mana-bar">', unsafe_allow_html=True)
         st.progress(current_mana / 100)
         st.markdown('</div>', unsafe_allow_html=True)
     with cm2:
-        st.caption(f"**CHAOS (ADMIN) : {current_chaos}%**")
+        st.caption(f"**CHAOS : {current_chaos}%**")
         st.markdown(f'<div class="chaos-bar">', unsafe_allow_html=True)
         st.progress(current_chaos / 100)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -193,48 +212,75 @@ with col_left:
             if st.button("×", key=f"xp_{i}"):
                 del_task(t, 1); st.rerun()
     
-    st.write("---") # Séparateur
+    st.write("---") 
 
-    # --- 2. ADMIN (EN DESSOUS) ---
-    st.markdown('<p class="section-header">🛡️ GESTION DU ROYAUME (ADMIN)</p>', unsafe_allow_html=True)
+    # --- 2. CENTRE DE COMMANDEMENT (ADMIN) ---
+    st.markdown('<p class="section-header">🛡️ CENTRE DE COMMANDEMENT (ADMIN)</p>', unsafe_allow_html=True)
     
-    # Message d'état (Chaos)
-    if current_chaos > 50:
-        st.markdown(f'<p class="chaos-text">⚠️ ATTENTION : CHAOS À {current_chaos}%</p>', unsafe_allow_html=True)
+    # A. GESTION DU LOYER (LE GROS MORCEAU)
+    if rent_paid_status:
+        st.markdown(f'<div class="rent-paid">✅ LOYER {datetime.now().strftime("%B").upper()} RÉGLÉ</div>', unsafe_allow_html=True)
+        st.write("")
     else:
-        st.caption(f"Niveau de Chaos : {current_chaos}% (Stable)")
+        # Calcul de l'urgence selon le jour du mois
+        day = datetime.now().day
+        rent_btn_label = "🏠 PAYER LOYER"
+        rent_help = "Payer maintenant"
+        
+        if day >= 29:
+            # MODE PANIQUE (FIN DE MOIS)
+            st.markdown('<div class="critical-alert">⚠️ IL RESTE 2 JOURS ! PAYE LE LOYER ! ⚠️</div>', unsafe_allow_html=True)
+            if st.button(rent_btn_label, type="primary"): # Bouton Rouge
+                save_xp(50, "Gestion", "Loyer"); st.rerun()
+                
+        elif day >= 20:
+            # MODE URGENCE (ROUGE)
+            st.caption(f"📅 Nous sommes le {day}. **C'est urgent.**")
+            if st.button(rent_btn_label, type="primary"): # Bouton Rouge
+                save_xp(50, "Gestion", "Loyer"); st.rerun()
+                
+        elif day >= 10:
+             # MODE ATTENTION (ORANGE - Simulée par texte car pas de btn orange natif)
+            st.caption(f"📅 Nous sommes le {day}. Pense au loyer.")
+            if st.button(rent_btn_label): # Bouton Normal
+                save_xp(50, "Gestion", "Loyer"); st.rerun()
+        else:
+            # MODE ZEN (DÉBUT DE MOIS)
+            st.caption(f"📅 Nous sommes le {day}. Tu as le temps.")
+            if st.button(rent_btn_label):
+                save_xp(50, "Gestion", "Loyer"); st.rerun()
 
-    # Ligne 1 : Mails & Agenda + Appels
-    c_ad1, c_ad2 = st.columns(2)
-    with c_ad1:
-        if st.button("📧 MAILS & AGENDA"):
-            save_xp(5, "Gestion", "Mails/Agenda"); st.rerun()
-    with c_ad2:
-        if st.button("📞 APPELS / RDV"):
-            save_xp(10, "Gestion", "Appels/RDV"); st.rerun()
+    st.write("") 
 
-    # Ligne 2 : Factures (Input + Bouton)
-    st.write("")
-    c_fac1, c_fac2 = st.columns([0.6, 0.4])
+    # B. MAILS & AGENDA (TRIÉ)
+    st.markdown("##### 📨 COMMUNICATIONS")
+    c_mail1, c_mail2, c_mail3 = st.columns(3)
+    
+    with c_mail1:
+        if st.button("🧹 TRI RAPIDE", help="Supprimer les spams, archiver (-5% Chaos)"):
+            save_xp(5, "Gestion", "Tri Mails"); st.rerun()
+    with c_mail2:
+        if st.button("✍️ RÉPONDRE", help="Ecrire les mails importants (-10% Chaos)"):
+            save_xp(10, "Gestion", "Réponse Mails"); st.rerun()
+    with c_mail3:
+        if st.button("📅 AGENDA", help="Organiser la semaine (-5% Chaos)"):
+            save_xp(5, "Gestion", "Agenda"); st.rerun()
+
+    # C. FINANCES & PAPIERS
+    st.markdown("##### 💸 FACTURES & PAPIERS")
+    c_fac1, c_fac2 = st.columns([0.65, 0.35])
     with c_fac1:
         facture_name = st.text_input("Nom facture (ex: Salt)...", label_visibility="collapsed")
     with c_fac2:
-        if st.button("💸 PAYER"):
+        if st.button("PAYER"):
             if facture_name:
                 save_xp(15, "Gestion", f"Facture: {facture_name}")
-                st.toast(f"Facture {facture_name} payée !")
+                st.toast(f"Payé : {facture_name}")
                 time.sleep(1); st.rerun()
-            else:
-                st.toast("Indique le nom de la facture.")
+    
+    if st.button("📞 APPELS / ADMINISTRATIF"):
+        save_xp(10, "Gestion", "Appels/Admin"); st.rerun()
 
-    # Ligne 3 : Loyer (Intelligent)
-    st.write("")
-    if rent_paid_status:
-        st.markdown('<div class="rent-paid">✅ LOYER DU MOIS PAYÉ</div>', unsafe_allow_html=True)
-    else:
-        # Bouton Rouge/Normal pour payer
-        if st.button("🏠 PAYER LOYER (1x/Mois)"):
-            save_xp(50, "Gestion", "Loyer"); st.rerun()
 
 # === DROITE : SPORT & ETUDES ===
 with col_right:
