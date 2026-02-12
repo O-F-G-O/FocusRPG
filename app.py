@@ -37,7 +37,7 @@ st.markdown("""
 
     /* === HUD HEADER === */
     .hud-box {
-        background-color: white; padding: 20px; border-radius: 0 0 15px 15px;
+        background-color: white; padding: 0px; border-radius: 0 0 15px 15px;
         border-bottom: 3px solid #333; box-shadow: 0 4px 15px rgba(0,0,0,0.08);
         margin-bottom: 30px; margin-left: -1rem; margin-right: -1rem;
     }
