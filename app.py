@@ -4,13 +4,14 @@ import gspread
 import time
 import random
 import streamlit.components.v1 as components
+import urllib.parse
 from google.oauth2.service_account import Credentials
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Selecta RPG", page_icon="🛡️", layout="wide")
 
-# --- SCRIPT ANTI-AUTOCOMPLETE (FORCE) ---
+# --- SCRIPT ANTI-AUTOCOMPLETE ---
 components.html(
     """<script>
     function cleanInputs() {
@@ -24,13 +25,13 @@ components.html(
     </script>""", height=0
 )
 
-# --- CSS (V40 - MOBILE OK + ZERO BLANC + SPORT OK) ---
+# --- CSS (V41 - CLEAN & SANS HUD-BOX) ---
 st.markdown("""
     <style>
-    /* 1. SUPPRESSION RADICALE DU HEADER */
+    /* SUPPRESSION HEADER */
     header { display: none !important; }
     [data-testid="stHeader"] { display: none !important; }
-    .block-container { padding-top: 0rem !important; margin-top: -2rem !important; }
+    .block-container { padding-top: 1rem !important; margin-top: -2rem !important; }
     
     /* Fond global */
     .stApp { background-color: #f4f6f9; color: #333; }
@@ -54,33 +55,42 @@ st.markdown("""
     
     .timer-box { font-family: 'Courier New', monospace; font-size: 2.2em; font-weight: bold; color: #d9534f; text-align: center; background-color: #fff; border: 2px solid #d9534f; border-radius: 8px; padding: 15px; margin: 10px 0; }
 
-    /* === COMMUNICATIONS === */
-    [data-testid="column"] .stButton button { height: 45px !important; }
-
     /* === MOBILE === */
     @media (max-width: 768px) {
-        .hud-box { padding: 10px; margin-top: -1.5rem; margin-left: -0.5rem; margin-right: -0.5rem; }
-        .hud-box h2 { font-size: 1.1em !important; }
-        .hud-box img { width: 55px !important; }
         .bar-label { font-size: 0.65em; }
         .bar-container { height: 12px; }
         [data-testid="column"] { min-width: 0px !important; }
-        .nav-btn-container { gap: 5px !important; }
         .stButton button { font-size: 0.75em !important; padding: 0px !important; }
     }
 
-    /* === BANNIERES === */
+    /* === SPECIAL === */
+    .comm-btn > div > div > button { height: 45px !important; }
     @keyframes pulse-red { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
-    .urgent-marker + div > button { background: linear-gradient(135deg, #d9534f, #c9302c) !important; color: white !important; animation: pulse-red 1.5s infinite !important; height: 55px !important; font-weight: 900 !important; border: none !important; }
-    .warning-marker + div > button { background: linear-gradient(135deg, #f0ad4e, #ec971f) !important; color: white !important; height: 48px !important; font-weight: 800 !important; border: none !important; }
+    .urgent-marker + div > button { background: linear-gradient(135deg, #d9534f, #c9302c) !important; color: white !important; animation: pulse-red 1.5s infinite !important; height: 55px !important; border: none !important; }
+    .warning-marker + div > button { background: linear-gradient(135deg, #f0ad4e, #ec971f) !important; color: white !important; height: 48px !important; border: none !important; }
     .gold-banner { background: linear-gradient(135deg, #bf953f, #fcf6ba, #b38728, #fbf5b7); color: #5c4004; padding: 15px; text-align: center; border-radius: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; border: 2px solid #d4af37; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
     .sober-marker + div > button { background-color: transparent !important; color: #888 !important; border: 1px solid #ccc !important; font-size: 0.7em !important; height: 28px !important; min-height: 28px !important; text-transform: none !important; width: auto !important; margin-top: 5px; }
-
-    /* === PAGES === */
-    .history-card { background: white; padding: 12px; border-radius: 8px; border-left: 5px solid #8A2BE2; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    .achievement-card { background: white; padding: 20px; border-radius: 12px; border: 2px solid #FFD700; text-align: center; }
+    
+    /* Style pour le lien Calendrier */
+    .cal-link { text-decoration: none; font-size: 1.2em; display:flex; align-items:center; justify-content:center; height: 40px; border: 1px solid #bbb; border-radius: 6px; background: white; }
+    .cal-link:hover { background: #eee; border-color: #333; }
     </style>
     """, unsafe_allow_html=True)
+
+# --- FONCTION LIEN GOOGLE AGENDA ---
+def create_cal_link(title, details=""):
+    base = "https://www.google.com/calendar/render?action=TEMPLATE"
+    # Date par défaut : Demain à 10h
+    now = datetime.now() + timedelta(days=1)
+    start = now.replace(hour=10, minute=0, second=0).strftime('%Y%m%dT%H%M00')
+    end = now.replace(hour=11, minute=0, second=0).strftime('%Y%m%dT%H%M00')
+    
+    params = {
+        "text": f"[RPG] {title}",
+        "details": details,
+        "dates": f"{start}/{end}"
+    }
+    return f"{base}&{urllib.parse.urlencode(params)}"
 
 # --- ENGINE ---
 def get_db():
@@ -116,6 +126,19 @@ def save_xp(amt, type_s, cmt=""):
         st.toast(f"+{amt} XP")
     except: pass
 
+def undo_payment(keyword):
+    try:
+        ws = get_db().worksheet("Data")
+        current_month = datetime.now().strftime("%Y-%m")
+        df = pd.DataFrame(ws.get_all_records())
+        mask = df['Date'].astype(str).str.contains(current_month) & df['Commentaire'].astype(str).str.contains(keyword)
+        if mask.any():
+            ws.delete_rows(int(df[mask].index[-1] + 2))
+            st.toast("Annulé.")
+            return True
+    except: pass
+    return False
+
 def get_stats():
     try:
         df = pd.DataFrame(get_db().worksheet("Data").get_all_records())
@@ -131,15 +154,6 @@ def get_stats():
         return xp, mana, chaos, rent, salt, df
     except: return 0, 100, 0, False, False, pd.DataFrame()
 
-# --- DATA SPORT (RESSUSCITÉE) ---
-FULL_BODY_PROGRAMS = {
-    "FB1. STRENGTH": "SQUAT 3x5\nBENCH 3x5\nROWING 3x6\nRDL 3x8\nPLANK 3x1min",
-    "FB2. HYPERTROPHY": "PRESSE 3x12\nTIRAGE 3x12\nCHEST PRESS 3x12\nLEG CURL 3x15\nELEVATIONS 3x15",
-    "FB3. POWER": "CLEAN 5x3\nJUMP LUNGE 3x8\nPULLUPS 4xMAX\nDIPS 4xMAX\nSWING 3x20",
-    "FB4. DUMBBELLS": "GOBLET SQUAT 4x10\nINCLINE PRESS 3x10\nROWING 3x12\nLUNGES 3x10\nARMS 3x12",
-    "FB7. CIRCUIT": "THRUSTERS x10\nRENEGADE ROW x8\nCLIMBERS x20\nPUSHUPS xMAX\nJUMPS x15"
-}
-
 # --- INIT ---
 if 'gym_current_prog' not in st.session_state: st.session_state['gym_current_prog'] = None
 if 'anki_start_time' not in st.session_state: st.session_state['anki_start_time'] = None
@@ -151,15 +165,15 @@ progress_pct = total_xp % 100
 current_month_name = ["JANVIER", "FÉVRIER", "MARS", "AVRIL", "MAI", "JUIN", "JUILLET", "AOÛT", "SEPTEMBRE", "OCTOBRE", "NOVEMBRE", "DÉCEMBRE"][datetime.now().month-1]
 
 # ==============================================================================
-# HUD HEADER
+# HEADER (SANS LA HUD-BOX BLANCHE)
 # ==============================================================================
-st.markdown('<div class="hud-box">', unsafe_allow_html=True)
-c_av, c_main, c_nav = st.columns([0.1, 0.7, 0.2])
-with c_av: st.image("avatar.png", width=80)
+c_av, c_main, c_nav = st.columns([0.15, 0.65, 0.2])
+with c_av: st.image("avatar.png", width=70)
 with c_main:
-    st.markdown(f"<h2 style='margin:0; border:none;'>NIVEAU {niveau} | SELECTA</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='margin:0; padding-top:10px;'>NIVEAU {niveau} | SELECTA</h3>", unsafe_allow_html=True)
     st.caption(f"{100 - progress_pct} XP requis pour le niveau {niveau+1}")
 with c_nav:
+    st.write("")
     n1, n2, n3, n4 = st.columns(4)
     if n1.button("🏰"): st.session_state['current_page'] = "Histoire"; st.rerun()
     if n2.button("🏆"): st.session_state['current_page'] = "HautsFaits"; st.rerun()
@@ -173,7 +187,7 @@ def draw_bar(l, v, c):
 with c_b1: draw_bar("EXPÉRIENCE", progress_pct, "xp-fill")
 with c_b2: draw_bar("MÉMOIRE", current_mana, "mana-fill")
 with c_b3: draw_bar("CHAOS", current_chaos, "chaos-fill")
-st.markdown('</div>', unsafe_allow_html=True)
+st.markdown("---")
 
 # ==============================================================================
 # PAGES LOGIC
@@ -187,11 +201,14 @@ if st.session_state['current_page'] == "Dashboard":
         with st.form("t_f", clear_on_submit=True):
             nt = st.text_input("Quête...", label_visibility="collapsed")
             if st.form_submit_button("AJOUTER TÂCHE") and nt: add_task(nt, 1); st.rerun()
+        
         for i, t in enumerate(load_tasks_v2(1)):
-            cl1, cl2, cl3 = st.columns([0.75, 0.12, 0.13])
+            cl1, cl2, cl3, cl4 = st.columns([0.65, 0.12, 0.12, 0.11])
             cl1.write(f"• {t}")
-            if cl2.button("✓", key=f"q_{i}"): save_xp(5, "Gestion", t); del_task(t, 1); st.rerun()
-            if cl3.button("×", key=f"d_{i}"): del_task(t, 1); st.rerun()
+            # Bouton Agenda pour chaque tâche
+            cl2.link_button("📅", create_cal_link(t), help="Planifier dans Google Agenda")
+            if cl3.button("✓", key=f"q_{i}"): save_xp(5, "Gestion", t); del_task(t, 1); st.rerun()
+            if cl4.button("×", key=f"d_{i}"): del_task(t, 1); st.rerun()
 
         st.markdown('<div class="section-header">🛡️ GESTION DU ROYAUME</div>', unsafe_allow_html=True)
         st.markdown("**LOYER**")
@@ -201,17 +218,25 @@ if st.session_state['current_page'] == "Dashboard":
             if day >= 29: st.markdown('<span class="urgent-marker"></span>', unsafe_allow_html=True)
             elif day >= 20: st.markdown('<span class="warning-marker"></span>', unsafe_allow_html=True)
             if st.button(f"🏠 PAYER LOYER {current_month_name}", key="r_b"): save_xp(50, "Gestion", "Loyer"); st.rerun()
+        if rent_paid:
+             st.markdown('<span class="sober-marker"></span>', unsafe_allow_html=True)
+             if st.button("↺ Annuler", key="undo_r"): undo_payment("Loyer"); st.rerun()
         
         st.write(""); st.markdown("**SALT**")
         if salt_paid: st.markdown(f'<div class="gold-banner">✨ SALT {current_month_name} RÉGLÉ ✨</div>', unsafe_allow_html=True)
         else:
             if st.button(f"🏠 PAYER SALT {current_month_name}", key="s_b"): save_xp(25, "Gestion", "Facture: Salt"); st.rerun()
+        if salt_paid:
+             st.markdown('<span class="sober-marker"></span>', unsafe_allow_html=True)
+             if st.button("↺ Annuler", key="undo_s"): undo_payment("Salt"); st.rerun()
 
         st.write(""); st.markdown("**COMMUNICATIONS**")
         c1, c2, c3 = st.columns(3)
         with c1: st.button("🧹 TRIER", key="m1", on_click=save_xp, args=(5, "Gestion", "Tri Mails"))
         with c2: st.button("✍️ RÉPONDRE", key="m2", on_click=save_xp, args=(10, "Gestion", "Réponse Mails"))
-        with c3: st.button("📅 AGENDA", key="m3", on_click=save_xp, args=(5, "Gestion", "Agenda"))
+        with c3: 
+            # Le bouton Agenda ouvre Google Calendar
+            st.link_button("📅 AGENDA", create_cal_link("Session Admin / Agenda"), help="Ouvrir Google Agenda")
 
         st.write(""); st.markdown("**AUTRES FACTURES**")
         with st.form("b_f", clear_on_submit=True):
@@ -247,11 +272,16 @@ if st.session_state['current_page'] == "Dashboard":
                     mm, ss = divmod(int((datetime.now() - st.session_state['anki_start_time']).total_seconds()), 60)
                     st.markdown(f'<div class="timer-box">{mm:02d}:{ss:02d}</div>', unsafe_allow_html=True); time.sleep(1); st.rerun()
 
-        # === SPORT RESTAURÉ (TIMER & ROULETTE) ===
         st.markdown('<div class="section-header">⚡ ENTRAÎNEMENT</div>', unsafe_allow_html=True)
         cs1, cs2 = st.columns(2, gap="medium")
-        
-        with cs1: # MAISON
+        FULL_BODY_PROGRAMS = {
+            "FB1. STRENGTH": "SQUAT 3x5\nBENCH 3x5\nROWING 3x6\nRDL 3x8\nPLANK 3x1min",
+            "FB2. HYPERTROPHY": "PRESSE 3x12\nTIRAGE 3x12\nCHEST PRESS 3x12\nLEG CURL 3x15\nELEVATIONS 3x15",
+            "FB3. POWER": "CLEAN 5x3\nJUMP LUNGE 3x8\nPULLUPS 4xMAX\nDIPS 4xMAX\nSWING 3x20",
+            "FB4. DUMBBELLS": "GOBLET SQUAT 4x10\nINCLINE PRESS 3x10\nROWING 3x12\nLUNGES 3x10\nARMS 3x12",
+            "FB7. CIRCUIT": "THRUSTERS x10\nRENEGADE ROW x8\nCLIMBERS x20\nPUSHUPS xMAX\nJUMPS x15"
+        }
+        with cs1:
             st.markdown("**🏠 MAISON**")
             if st.button("⏱️ TIMER 20 MIN"):
                 ph = st.empty()
@@ -260,8 +290,7 @@ if st.session_state['current_page'] == "Dashboard":
                     ph.markdown(f'<div class="timer-box">{m:02d}:{sec:02d}</div>', unsafe_allow_html=True)
                     time.sleep(1)
             if st.button("VALIDER MAISON (+20 XP)"): save_xp(20, "Force", "Maison"); st.rerun()
-
-        with cs2: # SALLE
+        with cs2: 
             st.markdown("**🏋️ SALLE**")
             if st.button("🎲 GÉNÉRER SÉANCE"):
                 n, d = random.choice(list(FULL_BODY_PROGRAMS.items()))
