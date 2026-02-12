@@ -13,9 +13,13 @@ st.set_page_config(page_title="Selecta RPG", page_icon="🛡️", layout="wide")
 st.markdown("""
     <style>
     .stApp { background-color: #F8F9FA; color: #333; }
-    .stProgress > div > div > div > div { background-color: #333; } 
-    .mana-bar .stProgress > div > div > div > div { background-color: #00A8E8 !important; }
     
+    /* Barres */
+    .stProgress > div > div > div > div { background-color: #333; } /* XP */
+    .mana-bar .stProgress > div > div > div > div { background-color: #00A8E8 !important; } /* Mana */
+    .chaos-bar .stProgress > div > div > div > div { background-color: #D9534F !important; } /* Chaos */
+
+    /* Boutons */
     .stButton>button {
         width: 100%; min-height: 38px;
         border: 1px solid #333; border-radius: 4px;
@@ -31,19 +35,14 @@ st.markdown("""
         font-weight: 900; font-size: 1.1em;
     }
     
-    /* Timer Display Style "Montre Digitale" */
     .timer-display {
-        font-family: 'Courier New', monospace;
-        font-size: 2em;
-        font-weight: bold;
-        color: #d9534f;
-        text-align: center;
-        border: 2px solid #d9534f;
-        border-radius: 5px;
-        padding: 10px;
-        margin: 10px 0;
-        background-color: #fff5f5;
+        font-family: 'Courier New', monospace; font-size: 2em; font-weight: bold;
+        color: #d9534f; text-align: center; border: 2px solid #d9534f;
+        border-radius: 5px; padding: 10px; margin: 10px 0; background-color: #fff5f5;
     }
+    
+    /* Indicateur Chaos */
+    .chaos-text { color: #D9534F; font-weight: bold; font-size: 0.9em; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -51,7 +50,7 @@ st.markdown("""
 if 'gym_current_prog' not in st.session_state: st.session_state['gym_current_prog'] = None
 if 'anki_start_time' not in st.session_state: st.session_state['anki_start_time'] = None
 
-# --- G-SHEETS (VERSION "PROPRE" SANS TROUS) ---
+# --- G-SHEETS ---
 def get_db():
     secrets = st.secrets["connections"]["gsheets"]
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -60,31 +59,26 @@ def get_db():
     return client.open_by_url(secrets["spreadsheet"])
 
 def load_tasks(col_idx):
-    # On charge toute la colonne et on filtre les vides en Python pour l'affichage
     try: 
-        raw_data = get_db().worksheet("Tasks").col_values(col_idx)[1:]
-        return [x for x in raw_data if x.strip() != ""] 
+        raw = get_db().worksheet("Tasks").col_values(col_idx)[1:]
+        return [x for x in raw if x.strip() != ""] 
     except: return []
 
 def add_task(t, col_idx): 
     try: 
         ws = get_db().worksheet("Tasks")
-        # On lit la colonne pour trouver la première case vide réelle
         col_values = ws.col_values(col_idx)
-        # La prochaine ligne vide est la longueur de la colonne + 1
-        next_row = len(col_values) + 1
-        ws.update_cell(next_row, col_idx, t)
+        ws.update_cell(len(col_values) + 1, col_idx, t)
     except: pass
 
 def del_task(t, col_idx):
     try: 
         ws = get_db().worksheet("Tasks")
         cell = ws.find(t, in_column=col_idx)
-        # On efface juste le contenu, on ne supprime pas la ligne pour pas décaler les voisins
         ws.update_cell(cell.row, col_idx, "") 
     except: pass
 
-# --- XP SYSTEM ---
+# --- XP & STATS ENGINE ---
 def save_xp(amt, type_s, cmt=""):
     try:
         get_db().worksheet("Data").append_row([datetime.now().strftime("%Y-%m-%d %H:%M"), type_s, amt, cmt])
@@ -94,17 +88,31 @@ def save_xp(amt, type_s, cmt=""):
 def get_stats():
     try:
         df = pd.DataFrame(get_db().worksheet("Data").get_all_records())
-        if df.empty: return 0, 100
+        if df.empty: return 0, 100, 0
+        
+        # 1. XP TOTAL
         xp = int(pd.to_numeric(df["XP"], errors='coerce').sum())
         
+        # 2. MANA (Intellect)
         anki_logs = df[df['Commentaire'].str.contains("Combat", case=False, na=False)]
         if anki_logs.empty: mana = 50 
         else:
-            last_date = datetime.strptime(anki_logs.iloc[-1]['Date'], "%Y-%m-%d %H:%M")
-            days_diff = (datetime.now() - last_date).days
-            mana = max(0, 100 - (days_diff * 10))
-        return xp, mana
-    except: return 0, 50
+            last_anki = datetime.strptime(anki_logs.iloc[-1]['Date'], "%Y-%m-%d %H:%M")
+            days_anki = (datetime.now() - last_anki).days
+            mana = max(0, 100 - (days_anki * 10)) # -10% par jour
+        
+        # 3. CHAOS (Admin)
+        # On cherche les logs de type "Gestion" ou commentaire "Purge"
+        admin_logs = df[df['Type'].str.contains("Gestion", case=False, na=False)]
+        if admin_logs.empty: chaos = 50
+        else:
+            last_admin = datetime.strptime(admin_logs.iloc[-1]['Date'], "%Y-%m-%d %H:%M")
+            days_admin = (datetime.now() - last_admin).days
+            # Le Chaos monte de 10% par jour sans admin
+            chaos = min(100, days_admin * 10) 
+            
+        return xp, mana, chaos
+    except: return 0, 50, 50
 
 # --- DATA SPORT ---
 FULL_BODY_PROGRAMS = {
@@ -116,7 +124,7 @@ FULL_BODY_PROGRAMS = {
 }
 
 # --- LOGIQUE ---
-total_xp, current_mana = get_stats()
+total_xp, current_mana, current_chaos = get_stats()
 niveau = 1 + (total_xp // 100)
 progress_pct = total_xp % 100
 xp_needed = 100 - progress_pct
@@ -127,24 +135,57 @@ with c_avatar:
     st.image("avatar.png", width=90)
 with c_infos:
     st.markdown(f"### NIV. {niveau} | SELECTA")
+    
+    # XP
     st.caption(f"**XP : {total_xp}** (Prochain : {xp_needed})")
     st.progress(progress_pct / 100)
-    st.caption(f"**MÉMOIRE (MANA) : {current_mana}%**")
-    st.progress(current_mana / 100)
+    
+    # MANA & CHAOS sur la même ligne visuelle (2 colonnes)
+    cm1, cm2 = st.columns(2)
+    with cm1:
+        st.caption(f"**MÉMOIRE (MANA) : {current_mana}%**")
+        st.markdown(f'<div class="mana-bar">', unsafe_allow_html=True)
+        st.progress(current_mana / 100)
+        st.markdown('</div>', unsafe_allow_html=True)
+    with cm2:
+        st.caption(f"**CORRUPTION (CHAOS) : {current_chaos}%**")
+        st.markdown(f'<div class="chaos-bar">', unsafe_allow_html=True)
+        st.progress(current_chaos / 100)
+        st.markdown('</div>', unsafe_allow_html=True)
 
 st.write("---")
 
 # === LAYOUT ===
 col_left, col_right = st.columns([1, 2], gap="large")
 
-# === GAUCHE : TÂCHES QUOTIDIENNES ===
+# === GAUCHE : QUÊTES & ADMIN ===
 with col_left:
+    # 1. ADMIN (LA CORRUPTION)
+    st.markdown('<p class="section-header">🛡️ GESTION DU ROYAUME (ADMIN)</p>', unsafe_allow_html=True)
+    if current_chaos > 0:
+        st.markdown(f'<p class="chaos-text">⚠️ CORRUPTION À {current_chaos}% - PURGE NÉCESSAIRE</p>', unsafe_allow_html=True)
+    else:
+        st.caption("Le royaume est en ordre.")
+
+    c_adm1, c_adm2 = st.columns(2)
+    with c_adm1:
+        if st.button("🧹 PURGE MAILS"):
+            save_xp(5, "Gestion", "Mails"); st.rerun()
+    with c_adm2:
+        if st.button("💸 BUDGET / BANQUE"):
+            save_xp(10, "Gestion", "Finances"); st.rerun()
+    
+    if st.button("📞 APPELS & PAPIERS"):
+        save_xp(15, "Gestion", "Diplomatie"); st.rerun()
+
+    st.write("---")
+
+    # 2. TASKS
     st.markdown('<p class="section-header">📌 QUÊTES DU JOUR</p>', unsafe_allow_html=True)
     new_t = st.text_input("Tâche perso...", label_visibility="collapsed")
     if st.button("AJOUTER TÂCHE"):
         if new_t: add_task(new_t, 1); st.rerun()
     
-    st.write("")
     tasks = load_tasks(1) 
     for i, t in enumerate(tasks):
         c1, c2, c3 = st.columns([0.7, 0.15, 0.15])
@@ -159,86 +200,58 @@ with col_left:
 # === DROITE : SPORT & ETUDES ===
 with col_right:
     
-    # --- 01. ETUDES (LE GRIMOIRE) ---
+    # --- 01. ETUDES ---
     st.markdown('<p class="section-header">🧠 FORGE DU SAVOIR (ANKI)</p>', unsafe_allow_html=True)
     
     c_create, c_combat = st.columns(2, gap="medium")
     
-    # COLONNE 1: LE GRIMOIRE (CRÉATION)
     with c_create:
-        st.caption("📜 **LE GRIMOIRE (COURS À FICHER)**")
-        
-        with st.expander("📥 IMPORTER (TXT)"):
+        st.caption("📜 **GRIMOIRE**")
+        with st.expander("📥 IMPORTER"):
             uploaded_file = st.file_uploader("Un cours par ligne", type="txt")
             if uploaded_file and st.button("IMPORTER"):
                 stringio = uploaded_file.getvalue().decode("utf-8")
-                count = 0
                 for line in stringio.splitlines():
-                    if line.strip(): add_task(line.strip(), 2); count += 1 
-                st.success(f"{count} cours ajoutés !")
-                time.sleep(1); st.rerun()
+                    if line.strip(): add_task(line.strip(), 2)
+                st.rerun()
         
         new_anki = st.text_input("Nouveau cours...", label_visibility="collapsed", key="anki_input")
         if st.button("AJOUTER AU GRIMOIRE"):
             if new_anki: add_task(new_anki, 2); st.rerun()
 
-        st.write("")
         anki_tasks = load_tasks(2)
-        if not anki_tasks:
-            st.caption("_Ton Grimoire est vide._")
+        if not anki_tasks: st.caption("_Grimoire vide._")
         else:
             for i, t in enumerate(anki_tasks):
                 c1, c2 = st.columns([0.8, 0.2])
                 c1.markdown(f"**{t}**")
-                if c2.button("✓", key=f"va_{i}", help="Ficher ce cours"):
+                if c2.button("✓", key=f"va_{i}"):
                     save_xp(30, "Intellect", f"Création: {t}"); del_task(t, 2); st.rerun()
 
-    # COLONNE 2: CHAMP DE BATAILLE (TIMER)
     with c_combat:
         st.caption("⚔️ **CHAMP DE BATAILLE**")
-        
         if st.session_state['anki_start_time'] is None:
-            # ETAT : AU REPOS
             st.write("") 
             st.markdown("Prêt à réviser ?")
-            if st.button("⚔️ COMMENCER LE COMBAT"):
-                st.session_state['anki_start_time'] = datetime.now()
-                st.rerun()
+            if st.button("⚔️ COMMENCER"):
+                st.session_state['anki_start_time'] = datetime.now(); st.rerun()
         else:
-            # ETAT : EN COMBAT (BOUCLE VISUELLE)
             start_t = st.session_state['anki_start_time']
-            placeholder = st.empty() # C'est ici que la magie opère
+            placeholder = st.empty()
             
-            # Bouton STOP (Doit être hors de la boucle sinon on ne peut pas cliquer)
-            if st.button("🏁 TERMINER & RÉCOLTER XP"):
+            if st.button("🏁 TERMINER"):
                 end_t = datetime.now()
                 duration = end_t - start_t
                 minutes = int(duration.total_seconds() // 60)
                 seconds = int(duration.total_seconds() % 60)
-                
-                # XP : 1 par minute, min 1
                 xp_gain = max(1, minutes)
                 if minutes >= 25: xp_gain += 5
-                
-                save_xp(xp_gain, "Intellect", f"Combat Anki ({minutes}m {seconds}s)")
-                st.session_state['anki_start_time'] = None
-                st.success(f"Combat fini : {minutes}m {seconds}s (+{xp_gain} XP)")
-                time.sleep(2)
-                st.rerun()
+                save_xp(xp_gain, "Intellect", f"Combat Anki ({minutes}m)"); st.session_state['anki_start_time'] = None; st.rerun()
 
-            # BOUCLE D'AFFICHAGE (Tourne jusqu'à ce qu'on clique sur Terminer)
-            # Note : Streamlit arrêtera cette boucle quand on cliquera sur le bouton ci-dessus car ça trigger un rerun
             while True:
                 delta = datetime.now() - start_t
                 mm, ss = divmod(int(delta.total_seconds()), 60)
-                placeholder.markdown(f"""
-                <div class="timer-display">
-                    {mm:02d}:{ss:02d}
-                </div>
-                <div style="text-align:center; font-size:0.8em; color:#666;">
-                    Concentre-toi. Le temps tourne.
-                </div>
-                """, unsafe_allow_html=True)
+                placeholder.markdown(f'<div class="timer-display">{mm:02d}:{ss:02d}</div>', unsafe_allow_html=True)
                 time.sleep(1)
 
     st.write("---")
