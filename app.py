@@ -9,7 +9,7 @@ from datetime import datetime
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Selecta RPG", page_icon="🛡️", layout="wide")
 
-# --- CSS (STYLE ÉPURÉ & SOBRE) ---
+# --- CSS (ALIGNEMENT PARFAIT & SOBRE) ---
 st.markdown("""
     <style>
     .stApp { background-color: #F8F9FA; color: #333; }
@@ -17,23 +17,36 @@ st.markdown("""
     /* Avatar Header */
     img.avatar-small { border-radius: 8px; border: 2px solid #333; }
     
-    /* Boutons Outline Sobres (Noir & Blanc) */
+    /* BOUTONS : CENTRAGE PARFAIT DU TEXTE/ICONE */
     .stButton>button {
         width: 100%;
-        border: 1px solid #333; /* Bordure plus fine */
+        height: auto;
+        min-height: 38px; /* Hauteur standard pour alignement */
+        border: 1px solid #333;
         border-radius: 4px;
-        background-color: transparent; /* Fond transparent */
+        background-color: transparent;
         color: #333;
         font-weight: 600;
         text-transform: uppercase;
-        font-size: 0.85em;
+        font-size: 0.9em;
         margin-top: 0px;
+        
+        /* La magie pour centrer le ✓ et le × */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 0px;
+        line-height: 1;
     }
+    
     .stButton>button:hover {
         background-color: #333; 
         color: white;
         border-color: #333;
     }
+    
+    /* Pour supprimer le décalage parfois causé par des paragraphes vides */
+    .stButton p { margin: 0px; padding: 0px; }
 
     /* Headers */
     .section-header {
@@ -42,7 +55,7 @@ st.markdown("""
         font-weight: 900; letter-spacing: -0.5px; font-size: 1.1em;
     }
     
-    /* Alignement vertical dans les colonnes */
+    /* Alignement vertical global des colonnes */
     div[data-testid="column"] {
         display: flex;
         flex-direction: column;
@@ -130,18 +143,15 @@ with col_left:
     st.write("")
     tasks = load_tasks()
     for i, t in enumerate(tasks):
-        # CORRECTION ALIGNEMENT : 0.7 texte, 0.15 valider, 0.15 supprimer
-        # Cela donne une taille égale aux deux boutons pour qu'ils s'alignent bien
+        # Colonnes ajustées pour un rendu compact et centré
         c1, c2, c3 = st.columns([0.7, 0.15, 0.15])
         
         with c1: 
             st.text(t)
         with c2: 
-            # Bouton sobre "✓"
             if st.button("✓", key=f"v_{i}"):
                 save_xp(10, "Gestion", t); del_task(t); st.rerun()
         with c3:
-            # Bouton sobre "×"
             if st.button("×", key=f"x_{i}"):
                 del_task(t); st.rerun()
 
@@ -176,18 +186,17 @@ with col_right:
             st.session_state['gym_current_prog'] = (prog_name, prog_details)
             st.rerun() 
 
+        # Logique simplifiée : plus de "else" avec le message bleu
         if st.session_state['gym_current_prog']:
             name, details = st.session_state['gym_current_prog']
             
+            st.write("") # Petit espace
             st.markdown(f"**{name}**")
-            # Liste à puces propre
             for l in details.split('\n'):
                 st.markdown(f"- {l}")
 
             if st.button("VALIDER SALLE (+50 XP)"):
                 save_xp(50, "Force", f"FB: {name}"); st.session_state['gym_current_prog'] = None; st.rerun()
-        else:
-            st.info("Clique sur le dé pour tirer une séance.")
 
     st.write("---")
 
