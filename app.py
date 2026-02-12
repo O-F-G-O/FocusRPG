@@ -9,30 +9,28 @@ from datetime import datetime
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Selecta RPG", page_icon="🛡️", layout="wide")
 
-# --- CSS (CORRECTIFS V28) ---
+# --- CSS (CORRECTIFS V29 - ALIGNEMENT & BOUTONS CUSTOM) ---
 st.markdown("""
     <style>
     /* Fond global */
     .stApp { background-color: #f4f6f9; color: #333; }
-    
-    /* FIX: Supprimer l'espace blanc au dessus du HUD */
+    /* Supprimer marge haut */
     .block-container { padding-top: 1rem !important; }
 
-    /* === HUD HEADER === */
-    .hud-box {
-        background-color: white;
-        padding: 15px 25px;
-        border-radius: 0 0 12px 12px; /* Arrondi seulement en bas */
-        border-bottom: 4px solid #333;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-        margin-bottom: 30px;
-        margin-top: -1rem; /* Remonte pour coller au bord */
+    /* === HEADER HUD ALIGNÉ === */
+    /* On s'assure que les éléments du header sont centrés verticalement */
+    [data-testid="stHorizontalBlock"] > div {
+        display: flex;
+        align-items: center;
     }
+    h2 { margin-bottom: 0px !important; } /* Remonte le titre */
+    .stCaption { margin-top: 0px !important; margin-bottom: 5px !important; }
 
     /* === BARRES PROGRESSION CUSTOM === */
     .bar-container {
         background-color: #e0e0e0; border-radius: 10px;
-        width: 100%; height: 20px; margin-top: 5px; margin-bottom: 5px;
+        width: 100%; height: 18px; /* Un peu plus fin pour l'élégance */
+        margin-top: 2px; margin-bottom: 8px;
         box-shadow: inset 0 1px 3px rgba(0,0,0,0.2); overflow: hidden;
     }
     .bar-fill {
@@ -40,49 +38,18 @@ st.markdown("""
         display: flex; align-items: center; justify-content: flex-end;
         padding-right: 5px; color: white; font-size: 0.7em; font-weight: bold;
     }
-    .xp-fill { background-color: #8A2BE2; box-shadow: 0 0 10px #8A2BE2; }
-    .mana-fill { background-color: #0056b3; box-shadow: 0 0 10px #0056b3; }
-    .chaos-fill { background-color: #800000; box-shadow: 0 0 10px #800000; }
+    .xp-fill { background-color: #8A2BE2; }
+    .mana-fill { background-color: #0056b3; }
+    .chaos-fill { background-color: #800000; }
 
-    /* === LOYER : STYLE UNIFIÉ === */
-    .rent-banner {
-        padding: 15px; text-align: center; border-radius: 8px;
-        font-weight: 900; text-transform: uppercase; letter-spacing: 2px;
-        margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.15);
-        text-shadow: 1px 1px 0px rgba(255,255,255,0.2);
-    }
-    /* Payé (Or) */
-    .rent-gold {
-        background: linear-gradient(135deg, #bf953f, #fcf6ba, #b38728, #fbf5b7);
-        color: #5c4004; border: 2px solid #d4af37;
-    }
-    /* Urgent (Rouge + Pulse) */
-    @keyframes pulse-red {
-        0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); }
-    }
-    .rent-urgent {
-        background: linear-gradient(135deg, #d9534f, #c9302c);
-        color: white; border: 2px solid #a94442; animation: pulse-red 1.5s infinite;
-        text-shadow: none;
-    }
-    /* Warning (Orange) */
-    .rent-warning {
-        background: linear-gradient(135deg, #f0ad4e, #ec971f);
-        color: white; border: 2px solid #d58512; text-shadow: none;
-    }
-    /* Normal (Gris) */
-    .rent-normal {
-         background: linear-gradient(135deg, #e9ecef, #dee2e6);
-         color: #555; border: 2px solid #ccc;
-    }
-
-    /* === UI GENERALE === */
+    /* === UI GÉNÉRALE === */
     .section-header {
         font-size: 1.1em; font-weight: 800; text-transform: uppercase; color: #444;
         border-bottom: 2px solid #ddd; padding-bottom: 5px; margin-bottom: 15px; margin-top: 20px;
     }
+    /* Boutons standards */
     .stButton>button {
-        width: 100%; min-height: 42px;
+        width: 100%; min-height: 42px; /* Hauteur forcée pour uniformité */
         border: 1px solid #bbb; border-radius: 6px;
         background-color: white; color: #333;
         font-weight: 600; text-transform: uppercase; font-size: 0.85em;
@@ -96,6 +63,45 @@ st.markdown("""
         color: #d9534f; text-align: center; 
         background-color: #fff; border: 2px solid #d9534f; border-radius: 8px;
         padding: 15px; margin: 10px 0;
+    }
+
+    /* === BOUTONS CUSTOM (RENT & SOBER) === */
+    /* Technique : on cible le bouton qui suit un span invisible spécifique */
+    
+    /* 1. Bouton URGENT (Rouge pulse) */
+    @keyframes pulse-red { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+    .urgent-marker + div > button {
+        background: linear-gradient(135deg, #d9534f, #c9302c) !important;
+        color: white !important; border: 2px solid #a94442 !important;
+        font-weight: 900 !important; letter-spacing: 1px !important; font-size: 1em !important;
+        animation: pulse-red 1.5s infinite !important; height: 50px !important;
+    }
+    
+    /* 2. Bouton WARNING (Orange) */
+    .warning-marker + div > button {
+        background: linear-gradient(135deg, #f0ad4e, #ec971f) !important;
+        color: white !important; border: 2px solid #d58512 !important;
+        font-weight: 800 !important; font-size: 0.95em !important; height: 45px !important;
+    }
+    
+    /* 3. Bouton SOBRE (Annuler gris petit) */
+    .sober-marker + div > button {
+         background-color: transparent !important; color: #999 !important;
+         border: 1px solid #ddd !important; font-size: 0.75em !important; 
+         height: 30px !important; min-height: 30px !important; 
+         margin-top: -10px !important; /* Remonte un peu */
+    }
+    .sober-marker + div > button:hover {
+         background-color: #eee !important; color: #333 !important; border-color: #aaa !important;
+    }
+
+    /* Bannière Loyer Payé (Non cliquable) */
+    .rent-gold-banner {
+        background: linear-gradient(135deg, #bf953f, #fcf6ba, #b38728, #fbf5b7);
+        color: #5c4004; padding: 15px; text-align: center; border-radius: 8px;
+        font-weight: 900; text-transform: uppercase; letter-spacing: 2px;
+        border: 2px solid #d4af37; box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+        text-shadow: 1px 1px 0px rgba(255,255,255,0.2); margin-bottom: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -219,10 +225,9 @@ xp_needed = 100 - progress_pct
 current_month_name = MOIS_FR[datetime.now().month]
 
 # ==============================================================================
-# HUD HEADER (Collé en haut)
+# HEADER (HUD) ALIGNÉ
 # ==============================================================================
-st.markdown('<div class="hud-box">', unsafe_allow_html=True)
-c_av, c_main, c_sec = st.columns([0.1, 0.6, 0.3])
+c_av, c_main, c_sec = st.columns([0.12, 0.58, 0.3]) # Ratios ajustés pour l'alignement
 
 with c_av:
     st.image("avatar.png", use_container_width=True)
@@ -233,10 +238,11 @@ with c_main:
     draw_bar("EXPÉRIENCE", progress_pct, "xp-fill")
 
 with c_sec:
-    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+    # L'alignement vertical est géré par le CSS flexbox sur les colonnes
     draw_bar("MÉMOIRE (MANA)", current_mana, "mana-fill")
     draw_bar("CHAOS (ADMIN)", current_chaos, "chaos-fill")
-st.markdown('</div>', unsafe_allow_html=True)
+
+st.write("---")
 
 
 # ==============================================================================
@@ -269,34 +275,34 @@ with col_left:
     # 2. GESTION DU ROYAUME
     st.markdown('<div class="section-header">🛡️ GESTION DU ROYAUME</div>', unsafe_allow_html=True)
 
-    # A. LOYER (VISUEL UNIFIÉ)
+    # A. LOYER (BOUTONS CUSTOMISÉS)
     st.markdown("**LOYER**")
     if rent_paid_status:
-        st.markdown(f'<div class="rent-banner rent-gold">✨ LOYER {current_month_name} RÉGLÉ ✨</div>', unsafe_allow_html=True)
-        # Petit lien discret pour annuler
-        if st.button("annuler (erreur)", key="undo_rent"):
+        st.markdown(f'<div class="rent-gold-banner">✨ LOYER {current_month_name} RÉGLÉ ✨</div>', unsafe_allow_html=True)
+        # Marqueur pour bouton sobre
+        st.markdown('<span class="sober-marker"></span>', unsafe_allow_html=True)
+        if st.button("annuler paiement (erreur)", key="undo_rent"):
              undo_rent_payment(); st.rerun()
     else:
         day = datetime.now().day
         if day >= 29:
-            # URGENT (ROUGE PULSE)
-            st.markdown(f'<div class="rent-banner rent-urgent">⚠️ PAYE LE LOYER DE {current_month_name} !</div>', unsafe_allow_html=True)
-            if st.button("🏠 PAYER MAINTENANT", type="primary"): 
+            # Marqueur Urgent (Rouge Pulse)
+            st.markdown('<span class="urgent-marker"></span>', unsafe_allow_html=True)
+            if st.button(f"⚠️ PAYER LOYER {current_month_name} !", key="rent_btn"): 
                 save_xp(50, "Gestion", "Loyer"); st.rerun()
         elif day >= 20:
-            # WARNING (ORANGE)
-            st.markdown(f'<div class="rent-banner rent-warning">RAPPEL : LOYER DE {current_month_name}</div>', unsafe_allow_html=True)
-            if st.button("🏠 PAYER LOYER"):
+            # Marqueur Warning (Orange)
+            st.markdown('<span class="warning-marker"></span>', unsafe_allow_html=True)
+            if st.button(f"RAPPEL : LOYER {current_month_name}", key="rent_btn"):
                 save_xp(50, "Gestion", "Loyer"); st.rerun()
         else:
-            # NORMAL (NEUTRE)
-            st.markdown(f'<div class="rent-banner rent-normal">LOYER DE {current_month_name} (EN ATTENTE)</div>', unsafe_allow_html=True)
-            if st.button("🏠 PAYER LOYER"):
+            # Bouton Normal (Gris par défaut)
+            if st.button(f"PAYER LOYER {current_month_name} (EN ATTENTE)", key="rent_btn"):
                 save_xp(50, "Gestion", "Loyer"); st.rerun()
 
     st.write("")
 
-    # B. COMMUNICATIONS
+    # B. COMMUNICATIONS (TAILLE UNIFORME VIA CSS)
     st.markdown("**COMMUNICATIONS**")
     c_mail1, c_mail2, c_mail3 = st.columns(3)
     with c_mail1:
@@ -319,13 +325,12 @@ with col_left:
                 save_xp(15, "Gestion", f"Facture: {facture_name}"); st.toast("Payé !"); time.sleep(1); st.rerun()
 
 
-# === COLONNE DROITE : ETUDES & SPORT (RETOUR AUX COLONNES) ===
+# === COLONNE DROITE : ETUDES & SPORT ===
 with col_right:
     
     # 3. ETUDES
     st.markdown('<div class="section-header">🧠 FORGE DU SAVOIR</div>', unsafe_allow_html=True)
     
-    # RETOUR AUX COLONNES CÔTE À CÔTE
     c_create, c_combat = st.columns(2, gap="medium")
     
     with c_create:
@@ -356,7 +361,8 @@ with col_right:
     with c_combat:
         st.caption("⚔️ **COMBAT (ANKI)**")
         if st.session_state['anki_start_time'] is None:
-            st.info("Prêt à réviser ?")
+            # Plus de st.info ici, juste du texte
+            st.write("Prêt à réviser ?")
             if st.button("⚔️ LANCER LE COMBAT", type="primary"):
                 st.session_state['anki_start_time'] = datetime.now(); st.rerun()
         else:
@@ -383,7 +389,6 @@ with col_right:
     # 4. SPORT
     st.markdown('<div class="section-header">⚡ ENTRAÎNEMENT</div>', unsafe_allow_html=True)
     
-    # RETOUR AUX COLONNES CÔTE À CÔTE
     c_home, c_gym = st.columns(2, gap="medium")
     
     with c_home:
@@ -405,6 +410,9 @@ with col_right:
         
         if st.session_state['gym_current_prog']:
             n, d = st.session_state['gym_current_prog']
-            st.info(f"**{n}**\n\n" + "\n".join([f"- {l}" for l in d.split('\n')]))
+            # Plus de st.info ici, markdown simple
+            st.markdown(f"**{n}**")
+            for l in d.split('\n'): st.markdown(f"- {l}")
+            
             if st.button("VALIDER SALLE (+50 XP)"):
                 save_xp(50, "Force", n); st.session_state['gym_current_prog']=None; st.rerun()
