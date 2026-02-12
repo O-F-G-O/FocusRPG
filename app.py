@@ -24,7 +24,7 @@ components.html(
     </script>""", height=0
 )
 
-# --- CSS (V38 - ZERO BLANC & HUD) ---
+# --- CSS (V39 - OPTIMISÉ NATEL & ZÉRO BLANC) ---
 st.markdown("""
     <style>
     /* 1. SUPPRESSION RADICALE DU HEADER (CARRÉ BLANC) */
@@ -35,7 +35,14 @@ st.markdown("""
     /* Fond global */
     .stApp { background-color: #f4f6f9; color: #333; }
 
-        /* === BARRES (COULEURS OK) === */
+    /* === HUD HEADER === */
+    .hud-box {
+        background-color: white; padding: 20px; border-radius: 0 0 15px 15px;
+        border-bottom: 3px solid #333; box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        margin-bottom: 30px; margin-left: -1rem; margin-right: -1rem;
+    }
+
+    /* === BARRES === */
     .bar-label { font-weight: 700; font-size: 0.8em; color: #555; margin-bottom: 5px; display: flex; justify-content: space-between; }
     .bar-container { background-color: #e9ecef; border-radius: 8px; width: 100%; height: 16px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); overflow: hidden; }
     .bar-fill { height: 100%; border-radius: 8px; transition: width 0.6s ease-in-out; }
@@ -43,7 +50,7 @@ st.markdown("""
     .mana-fill { background: linear-gradient(90deg, #0056b3, #007bff); }
     .chaos-fill { background: linear-gradient(90deg, #800000, #a71d2a); }
 
-    /* === UI === */
+    /* === UI GÉNÉRALE === */
     .section-header { font-size: 1.1em; font-weight: 800; text-transform: uppercase; color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; margin-bottom: 15px; margin-top: 20px; }
     
     .stButton>button, .stFormSubmitButton>button {
@@ -56,6 +63,20 @@ st.markdown("""
 
     /* === COMMUNICATIONS (TAILLE EGALE) === */
     [data-testid="column"] .stButton button { height: 45px !important; }
+
+    /* === ADAPTATION MOBILE (NATEL) === */
+    @media (max-width: 768px) {
+        .hud-box { padding: 10px; margin-top: -1.5rem; margin-left: -0.5rem; margin-right: -0.5rem; }
+        .hud-box h2 { font-size: 1.1em !important; }
+        .hud-box img { width: 55px !important; } /* Réduit l'avatar */
+        .bar-label { font-size: 0.65em; }
+        .bar-container { height: 12px; }
+        
+        /* Ajuste la navigation pour mobile */
+        [data-testid="column"] { min-width: 0px !important; }
+        .nav-btn-container { gap: 5px !important; }
+        .stButton button { font-size: 0.75em !important; padding: 0px !important; }
+    }
 
     /* === BANNIERES CUSTOM === */
     @keyframes pulse-red { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
@@ -70,13 +91,12 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- ENGINE ---
+# --- ENGINE G-SHEETS ---
 def get_db():
     secrets = st.secrets["connections"]["gsheets"]
     creds = Credentials.from_service_account_info(secrets, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
     return gspread.authorize(creds).open_by_url(secrets["spreadsheet"])
 
-# FIX BUG 10 ITEMS : On lit toute la feuille une fois pour être rapide
 def load_tasks_v2(col_idx):
     try:
         ws = get_db().worksheet("Tasks")
@@ -128,10 +148,10 @@ progress_pct = total_xp % 100
 current_month_name = ["JANVIER", "FÉVRIER", "MARS", "AVRIL", "MAI", "JUIN", "JUILLET", "AOÛT", "SEPTEMBRE", "OCTOBRE", "NOVEMBRE", "DÉCEMBRE"][datetime.now().month-1]
 
 # ==============================================================================
-# HUD HEADER (ZERO BLANC)
+# HUD HEADER
 # ==============================================================================
 st.markdown('<div class="hud-box">', unsafe_allow_html=True)
-c_av, c_main, c_nav = st.columns([0.1, 0.7, 0.2])
+c_av, c_main, c_nav = st.columns([0.1, 0.65, 0.25])
 with c_av: st.image("avatar.png", width=80)
 with c_main:
     st.markdown(f"<h2 style='margin:0; border:none;'>NIVEAU {niveau} | SELECTA</h2>", unsafe_allow_html=True)
