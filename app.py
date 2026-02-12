@@ -9,62 +9,71 @@ from datetime import datetime
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Selecta RPG", page_icon="🛡️", layout="wide")
 
-# --- CSS AVANCÉ (ANIMATIONS & COULEURS) ---
+# --- CSS (COULEURS & SÉPARATIONS) ---
 st.markdown("""
     <style>
     .stApp { background-color: #F8F9FA; color: #333; }
     
-    /* Barres de progression */
-    .stProgress > div > div > div > div { background-color: #333; } 
-    .mana-bar .stProgress > div > div > div > div { background-color: #00A8E8 !important; }
-    .chaos-bar .stProgress > div > div > div > div { background-color: #D9534F !important; }
+    /* === 1. BARRES DE PROGRESSION (COULEURS CUSTOM) === */
+    
+    /* XP = VIOLET */
+    .xp-bar .stProgress > div > div > div > div { background-color: #6f42c1 !important; }
+    
+    /* MANA = BLEU */
+    .mana-bar .stProgress > div > div > div > div { background-color: #007bff !important; }
+    
+    /* CHAOS = BORDEAUX */
+    .chaos-bar .stProgress > div > div > div > div { background-color: #800000 !important; }
 
-    /* Boutons standards */
+    /* === 2. CONTAINERS & SÉPARATIONS === */
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 5rem;
+    }
+    
+    /* Boites de section pour bien séparer */
+    .rpg-box {
+        background-color: white;
+        padding: 20px;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        margin-bottom: 25px; /* GROSSE MARGE EN BAS */
+    }
+    
+    .section-title {
+        font-size: 1.2em;
+        font-weight: 900;
+        text-transform: uppercase;
+        margin-bottom: 15px;
+        border-bottom: 3px solid #333;
+        padding-bottom: 5px;
+        display: inline-block;
+    }
+
+    /* === 3. ÉLÉMENTS UI === */
     .stButton>button {
-        width: 100%; min-height: 38px;
+        width: 100%; min-height: 40px;
         border: 1px solid #333; border-radius: 4px;
-        background-color: transparent; color: #333;
-        font-weight: 600; text-transform: uppercase; font-size: 0.85em;
-        display: flex; justify-content: center; align-items: center;
+        background-color: white; color: #333;
+        font-weight: 700; text-transform: uppercase; font-size: 0.85em;
     }
     .stButton>button:hover { background-color: #333; color: white; }
     
-    /* === LOYER : STYLES DYNAMIQUES === */
-    
-    /* 1. Loyer Payé (Vert Zen) */
+    /* Loyer Payé */
     .rent-paid {
-        background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;
-        padding: 15px; text-align: center; border-radius: 4px; font-weight: 800;
-        text-transform: uppercase; letter-spacing: 1px;
-    }
-
-    /* 2. Loyer Critique (Animation Pulse Rouge) */
-    @keyframes pulse-red {
-        0% { box-shadow: 0 0 0 0 rgba(217, 83, 79, 0.7); transform: scale(1); }
-        70% { box-shadow: 0 0 0 10px rgba(217, 83, 79, 0); transform: scale(1.02); }
-        100% { box-shadow: 0 0 0 0 rgba(217, 83, 79, 0); transform: scale(1); }
+        background-color: #d4edda; color: #155724; 
+        padding: 10px; border-radius: 4px; font-weight: bold; text-align: center;
+        border: 1px solid #c3e6cb; margin-bottom: 5px;
     }
     
-    /* On cible le bouton spécifique du loyer critique via CSS hack si besoin, 
-       mais ici on utilisera une classe markdown pour l'alerte visuelle */
+    /* Alertes */
     .critical-alert {
-        animation: pulse-red 2s infinite;
-        background-color: #D9534F; color: white;
+        background-color: #800000; color: white;
         padding: 10px; border-radius: 4px; text-align: center; font-weight: bold;
-        margin-bottom: 5px; border: 2px solid #c9302c;
+        margin-bottom: 5px; border: 2px solid #500000;
     }
     
-    .rent-warning { color: #f0ad4e; font-weight: bold; }
-    .rent-danger { color: #d9534f; font-weight: bold; }
-
-    /* Headers */
-    .section-header {
-        border-bottom: 2px solid #333;
-        padding-bottom: 5px; margin-bottom: 15px;
-        font-weight: 900; font-size: 1.1em;
-    }
-    
-    /* Timer Anki */
     .timer-display {
         font-family: 'Courier New', monospace; font-size: 2em; font-weight: bold;
         color: #d9534f; text-align: center; border: 2px solid #d9534f;
@@ -112,12 +121,35 @@ def save_xp(amt, type_s, cmt=""):
         st.toast(f"+{amt} XP")
     except: st.error("Erreur Save")
 
+def undo_rent_payment():
+    # Trouve la dernière ligne "Loyer" du mois et la supprime
+    try:
+        ws = get_db().worksheet("Data")
+        current_month = datetime.now().strftime("%Y-%m")
+        # On doit chercher toutes les lignes, c'est un peu lourd mais safe
+        records = ws.get_all_records()
+        df = pd.DataFrame(records)
+        
+        # On cherche l'index de la ligne à supprimer
+        # Filtre: contient "Loyer" et date du mois
+        mask = df['Date'].astype(str).str.contains(current_month) & df['Commentaire'].astype(str).str.contains("Loyer")
+        
+        if mask.any():
+            # On prend le dernier index (la dernière action)
+            # Attention: gspread index commence à 2 (1=Header)
+            # df index commence à 0. Donc row_to_delete = df_index + 2
+            idx_to_drop = df[mask].index[-1]
+            row_num = idx_to_drop + 2 
+            ws.delete_rows(int(row_num))
+            st.toast("Paiement Loyer Annulé !")
+            return True
+    except Exception as e:
+        st.error(f"Erreur annulation : {e}")
+    return False
+
 def check_rent_paid(df):
-    # Logique de renouvellement : On checke uniquement le mois courant (ex: "2023-10")
     try:
         current_month = datetime.now().strftime("%Y-%m")
-        # Si on trouve "Loyer" avec la date du mois courant, c'est payé.
-        # Le mois prochain, la date changera, donc ça retournera False -> Reset auto.
         rent_logs = df[df['Date'].str.contains(current_month, na=False) & df['Commentaire'].str.contains("Loyer", case=False, na=False)]
         return not rent_logs.empty
     except: return False
@@ -127,10 +159,8 @@ def get_stats():
         df = pd.DataFrame(get_db().worksheet("Data").get_all_records())
         if df.empty: return 0, 100, 0, False
         
-        # XP
         xp = int(pd.to_numeric(df["XP"], errors='coerce').sum())
         
-        # MANA
         anki_logs = df[df['Commentaire'].str.contains("Combat", case=False, na=False)]
         if anki_logs.empty: mana = 50 
         else:
@@ -138,7 +168,6 @@ def get_stats():
             days_anki = (datetime.now() - last_anki).days
             mana = max(0, 100 - (days_anki * 10))
         
-        # CHAOS (3% par jour)
         admin_logs = df[df['Type'].str.contains("Gestion", case=False, na=False)]
         if admin_logs.empty: chaos = 20
         else:
@@ -167,37 +196,46 @@ progress_pct = total_xp % 100
 xp_needed = 100 - progress_pct
 
 # === EN-TÊTE ===
+st.markdown('<div class="rpg-box">', unsafe_allow_html=True) # Boite Header
 c_avatar, c_infos = st.columns([0.15, 0.85])
 with c_avatar:
-    st.image("avatar.png", width=90)
+    st.image("avatar.png", width=100)
 with c_infos:
     st.markdown(f"### NIV. {niveau} | SELECTA")
+    
+    # XP (Violet)
     st.caption(f"**XP : {total_xp}** (Prochain : {xp_needed})")
+    st.markdown(f'<div class="xp-bar">', unsafe_allow_html=True)
     st.progress(progress_pct / 100)
+    st.markdown('</div>', unsafe_allow_html=True)
     
     cm1, cm2 = st.columns(2)
     with cm1:
+        # MANA (Bleu)
         st.caption(f"**MÉMOIRE : {current_mana}%**")
         st.markdown(f'<div class="mana-bar">', unsafe_allow_html=True)
         st.progress(current_mana / 100)
         st.markdown('</div>', unsafe_allow_html=True)
     with cm2:
+        # CHAOS (Bordeaux)
         st.caption(f"**CHAOS : {current_chaos}%**")
         st.markdown(f'<div class="chaos-bar">', unsafe_allow_html=True)
         st.progress(current_chaos / 100)
         st.markdown('</div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True) # Fin Boite Header
 
-st.write("---")
 
-# === LAYOUT ===
+# === LAYOUT COLONNES ===
 col_left, col_right = st.columns([1, 2], gap="large")
 
-# === GAUCHE : QUÊTES -> PUIS ADMIN ===
+# === GAUCHE (Quêtes + Admin) ===
 with col_left:
     
-    # --- 1. QUÊTES DU JOUR (TO DO) ---
-    st.markdown('<p class="section-header">📌 QUÊTES DU JOUR</p>', unsafe_allow_html=True)
-    new_t = st.text_input("Tâche perso...", label_visibility="collapsed")
+    # --- 1. SECTION QUÊTES DU JOUR ---
+    st.markdown('<div class="rpg-box">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">📌 QUÊTES DU JOUR</div>', unsafe_allow_html=True)
+    
+    new_t = st.text_input("Ajouter tâche...", label_visibility="collapsed")
     if st.button("AJOUTER TÂCHE"):
         if new_t: add_task(new_t, 1); st.rerun()
     
@@ -211,89 +249,70 @@ with col_left:
         with c3:
             if st.button("×", key=f"xp_{i}"):
                 del_task(t, 1); st.rerun()
-    
-    st.write("---") 
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- 2. CENTRE DE COMMANDEMENT (ADMIN) ---
-    st.markdown('<p class="section-header">🛡️ CENTRE DE COMMANDEMENT (ADMIN)</p>', unsafe_allow_html=True)
-    
-    # A. GESTION DU LOYER (LE GROS MORCEAU)
+
+    # --- 2. SECTION ADMIN ---
+    st.markdown('<div class="rpg-box">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">🛡️ COMMAND CENTER</div>', unsafe_allow_html=True)
+
+    # A. LOYER (AVEC ANNULATION)
+    st.markdown("**1. LOYER**")
     if rent_paid_status:
-        st.markdown(f'<div class="rent-paid">✅ LOYER {datetime.now().strftime("%B").upper()} RÉGLÉ</div>', unsafe_allow_html=True)
-        st.write("")
+        st.markdown(f'<div class="rent-paid">✅ LOYER RÉGLÉ</div>', unsafe_allow_html=True)
+        if st.button("❌ Annuler (Erreur)", key="undo_rent"):
+            undo_rent_payment()
+            st.rerun()
     else:
-        # Calcul de l'urgence selon le jour du mois
         day = datetime.now().day
-        rent_btn_label = "🏠 PAYER LOYER"
-        rent_help = "Payer maintenant"
-        
         if day >= 29:
-            # MODE PANIQUE (FIN DE MOIS)
-            st.markdown('<div class="critical-alert">⚠️ IL RESTE 2 JOURS ! PAYE LE LOYER ! ⚠️</div>', unsafe_allow_html=True)
-            if st.button(rent_btn_label, type="primary"): # Bouton Rouge
-                save_xp(50, "Gestion", "Loyer"); st.rerun()
-                
-        elif day >= 20:
-            # MODE URGENCE (ROUGE)
-            st.caption(f"📅 Nous sommes le {day}. **C'est urgent.**")
-            if st.button(rent_btn_label, type="primary"): # Bouton Rouge
-                save_xp(50, "Gestion", "Loyer"); st.rerun()
-                
-        elif day >= 10:
-             # MODE ATTENTION (ORANGE - Simulée par texte car pas de btn orange natif)
-            st.caption(f"📅 Nous sommes le {day}. Pense au loyer.")
-            if st.button(rent_btn_label): # Bouton Normal
+            st.markdown('<div class="critical-alert">⚠️ PAYE LE LOYER !</div>', unsafe_allow_html=True)
+            if st.button("🏠 PAYER MAINTENANT", type="primary"): 
                 save_xp(50, "Gestion", "Loyer"); st.rerun()
         else:
-            # MODE ZEN (DÉBUT DE MOIS)
-            st.caption(f"📅 Nous sommes le {day}. Tu as le temps.")
-            if st.button(rent_btn_label):
+            st.caption(f"Nous sommes le {day}. À payer avant le 28.")
+            if st.button("🏠 PAYER LOYER"):
                 save_xp(50, "Gestion", "Loyer"); st.rerun()
 
-    st.write("") 
+    st.write("---")
 
-    # B. MAILS & AGENDA (TRIÉ)
-    st.markdown("##### 📨 COMMUNICATIONS")
-    c_mail1, c_mail2, c_mail3 = st.columns(3)
-    
+    # B. MAILS
+    st.markdown("**2. COMMUNICATIONS**")
+    c_mail1, c_mail2 = st.columns(2)
     with c_mail1:
-        if st.button("🧹 TRI RAPIDE", help="Supprimer les spams, archiver (-5% Chaos)"):
-            save_xp(5, "Gestion", "Tri Mails"); st.rerun()
+        if st.button("🧹 TRIER"): save_xp(5, "Gestion", "Tri Mails"); st.rerun()
     with c_mail2:
-        if st.button("✍️ RÉPONDRE", help="Ecrire les mails importants (-10% Chaos)"):
-            save_xp(10, "Gestion", "Réponse Mails"); st.rerun()
-    with c_mail3:
-        if st.button("📅 AGENDA", help="Organiser la semaine (-5% Chaos)"):
-            save_xp(5, "Gestion", "Agenda"); st.rerun()
+        if st.button("✍️ RÉPONDRE"): save_xp(10, "Gestion", "Reponse Mails"); st.rerun()
+    if st.button("📅 AGENDA / PLANIF"): save_xp(5, "Gestion", "Agenda"); st.rerun()
 
-    # C. FINANCES & PAPIERS
-    st.markdown("##### 💸 FACTURES & PAPIERS")
+    st.write("---")
+
+    # C. FACTURES
+    st.markdown("**3. FACTURES**")
     c_fac1, c_fac2 = st.columns([0.65, 0.35])
     with c_fac1:
-        facture_name = st.text_input("Nom facture (ex: Salt)...", label_visibility="collapsed")
+        facture_name = st.text_input("Nom facture...", label_visibility="collapsed")
     with c_fac2:
         if st.button("PAYER"):
             if facture_name:
-                save_xp(15, "Gestion", f"Facture: {facture_name}")
-                st.toast(f"Payé : {facture_name}")
-                time.sleep(1); st.rerun()
+                save_xp(15, "Gestion", f"Facture: {facture_name}"); st.toast("Payé !"); time.sleep(1); st.rerun()
     
-    if st.button("📞 APPELS / ADMINISTRATIF"):
-        save_xp(10, "Gestion", "Appels/Admin"); st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
-# === DROITE : SPORT & ETUDES ===
+# === DROITE (Etudes + Sport) ===
 with col_right:
     
-    # --- 01. ETUDES ---
-    st.markdown('<p class="section-header">🧠 FORGE DU SAVOIR (ANKI)</p>', unsafe_allow_html=True)
+    # --- 3. SECTION ETUDES ---
+    st.markdown('<div class="rpg-box">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">🧠 FORGE DU SAVOIR</div>', unsafe_allow_html=True)
     
     c_create, c_combat = st.columns(2, gap="medium")
     
     with c_create:
-        st.caption("📜 **GRIMOIRE**")
+        st.caption("📜 **GRIMOIRE (COURS)**")
         with st.expander("📥 IMPORTER"):
-            uploaded_file = st.file_uploader("Un cours par ligne", type="txt")
+            uploaded_file = st.file_uploader("Fichier .txt", type="txt")
             if uploaded_file and st.button("IMPORTER"):
                 stringio = uploaded_file.getvalue().decode("utf-8")
                 for line in stringio.splitlines():
@@ -301,7 +320,7 @@ with col_right:
                 st.rerun()
         
         new_anki = st.text_input("Nouveau cours...", label_visibility="collapsed", key="anki_input")
-        if st.button("AJOUTER AU GRIMOIRE"):
+        if st.button("AJOUTER"):
             if new_anki: add_task(new_anki, 2); st.rerun()
 
         anki_tasks = load_tasks(2)
@@ -318,7 +337,7 @@ with col_right:
         if st.session_state['anki_start_time'] is None:
             st.write("") 
             st.markdown("Prêt à réviser ?")
-            if st.button("⚔️ COMMENCER"):
+            if st.button("⚔️ LANCER COMBAT"):
                 st.session_state['anki_start_time'] = datetime.now(); st.rerun()
         else:
             start_t = st.session_state['anki_start_time']
@@ -328,7 +347,6 @@ with col_right:
                 end_t = datetime.now()
                 duration = end_t - start_t
                 minutes = int(duration.total_seconds() // 60)
-                seconds = int(duration.total_seconds() % 60)
                 xp_gain = max(1, minutes)
                 if minutes >= 25: xp_gain += 5
                 save_xp(xp_gain, "Intellect", f"Combat Anki ({minutes}m)"); st.session_state['anki_start_time'] = None; st.rerun()
@@ -338,23 +356,26 @@ with col_right:
                 mm, ss = divmod(int(delta.total_seconds()), 60)
                 placeholder.markdown(f'<div class="timer-display">{mm:02d}:{ss:02d}</div>', unsafe_allow_html=True)
                 time.sleep(1)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    st.write("---")
-
-    # --- 02. SPORT ---
-    st.markdown('<p class="section-header">⚡ ENTRAÎNEMENT PHYSIQUE</p>', unsafe_allow_html=True)
+    # --- 4. SECTION SPORT ---
+    st.markdown('<div class="rpg-box">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">⚡ ENTRAÎNEMENT</div>', unsafe_allow_html=True)
+    
     c_home, c_gym = st.columns(2, gap="medium")
     
     with c_home:
+        st.markdown("**MAISON**")
         if st.button("⏱️ TIMER 20 MIN"):
             ph = st.empty()
             for s in range(1200, -1, -1):
                 m, sec = divmod(s, 60)
                 ph.markdown(f'<h3 style="text-align:center;">{m:02d}:{sec:02d}</h3>', unsafe_allow_html=True)
                 time.sleep(1)
-        if st.button("VALIDER MAISON (+20 XP)"): save_xp(20, "Force", "Maison"); st.rerun()
+        if st.button("VALIDER (+20 XP)"): save_xp(20, "Force", "Maison"); st.rerun()
 
     with c_gym:
+        st.markdown("**SALLE**")
         if st.button("🎲 GÉNÉRER SÉANCE"):
             n, d = random.choice(list(FULL_BODY_PROGRAMS.items()))
             st.session_state['gym_current_prog'] = (n, d)
@@ -364,5 +385,6 @@ with col_right:
             n, d = st.session_state['gym_current_prog']
             st.markdown(f"**{n}**")
             for l in d.split('\n'): st.markdown(f"- {l}")
-            if st.button("VALIDER SALLE (+50 XP)"):
+            if st.button("VALIDER (+50 XP)"):
                 save_xp(50, "Force", n); st.session_state['gym_current_prog']=None; st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
