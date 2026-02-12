@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 import time
+import random
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 
@@ -13,18 +14,9 @@ st.markdown("""
     <style>
     .stApp { background-color: #F8F9FA; color: #333; }
     
-    /* Style de l'Avatar en rond ou carré arrondi */
-    img.avatar-small {
-        border-radius: 10px;
-        border: 2px solid #333;
-    }
+    /* Avatar Header */
+    img.avatar-small { border-radius: 8px; border: 2px solid #333; }
     
-    /* Titres */
-    h3 { margin-bottom: 0px; padding-bottom: 0px; }
-    
-    /* Barre d'XP Brute (Noir) */
-    .stProgress > div > div > div > div { background-color: #333; }
-
     /* Boutons Outline */
     .stButton>button {
         width: 100%;
@@ -34,18 +26,32 @@ st.markdown("""
         color: #333;
         font-weight: 700;
         text-transform: uppercase;
-        font-size: 0.9em;
+        font-size: 0.85em;
+        margin-top: 5px;
     }
     .stButton>button:hover { background-color: #333; color: white; }
 
-    /* Headers de section */
+    /* Headers */
     .section-header {
         border-bottom: 2px solid #333;
         padding-bottom: 5px; margin-bottom: 15px;
         font-weight: 900; letter-spacing: -0.5px; font-size: 1.1em;
     }
+    
+    /* Boite programme propre */
+    .gym-box {
+        background-color: #E8F0FE;
+        border-left: 4px solid #333;
+        padding: 15px;
+        border-radius: 4px;
+        margin-bottom: 10px;
+    }
     </style>
     """, unsafe_allow_html=True)
+
+# --- INIT SESSION STATE (POUR GARDER LE PROGRAMME ALEATOIRE) ---
+if 'gym_current_prog' not in st.session_state:
+    st.session_state['gym_current_prog'] = None
 
 # --- MOTEUR G-SHEETS ---
 def get_db():
@@ -88,8 +94,8 @@ FULL_BODY_PROGRAMS = {
     "FB4. DUMBBELL ONLY (Haltères)": "GOBLET SQUAT HALTERE : 4 x 10 (Repos 90s)\nDEVELOPPÉ HALTERES INCLINÉ : 3 x 10 (Repos 90s)\nROWING HALTERE UNILATERAL : 3 x 12/bras (Repos 60s)\nFENTES ARRIERES HALTERES : 3 x 10/jambe (Repos 90s)\nCURL MARTEAU + EXT TRICEPS HALTERE : 3 x 12 (Super-set, Repos 60s)",
     "FB5. POSTERIOR CHAIN FOCUS (Dos/Ischios)": "SOULEVÉ DE TERRE CLASSIQUE : 3 x 5 (Repos 3min)\nTRACTIONS PRISE NEUTRE : 3 x 8 (Repos 2min)\nHIP THRUST BARRE : 3 x 10 (Repos 2min)\nINVERTED ROW (Poids du corps) : 3 x 12 (Repos 90s)\nFACE PULLS POULIE : 3 x 15 (Repos 60s)",
     "FB6. ANTERIOR FOCUS (Quad/Pecs)": "FRONT SQUAT (ou Goblet lourd) : 3 x 8 (Repos 2min)\nDEVELOPPÉ MILITAIRE DEBOUT : 3 x 8 (Repos 2min)\nFENTES BULGARES : 3 x 10/jambe (Repos 90s)\nPOMPES LESTÉES (ou machine pecs) : 3 x 12 (Repos 90s)\nAB WHEEL (Roulette abdos) : 3 x 10 (Repos 90s)",
-    "FB7. METABOLIC CIRCUIT (Intensité)": "Circuit - 4 tours - 60s repos entre tours :\n1. THRUSTERS (Haltères) x 10\n2. RENEGADE ROW x 8/bras\n3. MOUNTAIN CLIMBERS x 20/jambe\n4. PUSH-UPS x MAX\n5. JUMP SQUATS x 15",
-    "FB8. 'THE GRIND' (Densité)": "SQUAT : 10min AMRAP (As Many Reps As Possible) avec un poids de 10RM.\nRepos 5min.\nBENCH PRESS : 10min AMRAP avec un poids de 10RM.\nRepos 5min.\nTRACTIONS : 10min AMRAP (poids du corps).\n(Objectif : faire le max de volume en 10min par exo)"
+    "FB7. METABOLIC CIRCUIT (Intensité)": "Circuit - 4 tours - 60s repos :\nTHRUSTERS (Haltères) x 10\nRENEGADE ROW x 8/bras\nMOUNTAIN CLIMBERS x 20/jambe\nPUSH-UPS x MAX\nJUMP SQUATS x 15",
+    "FB8. 'THE GRIND' (Densité)": "SQUAT : 10min AMRAP (10RM)\nRepos 5min\nBENCH PRESS : 10min AMRAP (10RM)\nRepos 5min\nTRACTIONS : 10min AMRAP (Poids du corps)"
 }
 
 # --- LOGIQUE ---
@@ -98,23 +104,16 @@ niveau = 1 + (total_xp // 100)
 progress_pct = total_xp % 100
 xp_needed = 100 - progress_pct
 
-# === NOUVEL EN-TÊTE ===
-# On crée deux colonnes : une petite pour l'avatar, une grande pour le texte
+# === EN-TÊTE ===
 c_avatar, c_infos = st.columns([0.1, 0.9])
-
 with c_avatar:
-    # Affiche l'image "avatar.png" en petit (80 pixels de large)
     st.image("avatar.png", width=80)
-
 with c_infos:
-    # Le texte aligné à côté
     st.markdown(f"### SELECTA | NIVEAU {niveau}")
-    st.caption(f"**{total_xp} XP** TOTAL ACQUIS • PROCHAIN PALIER DANS **{xp_needed} XP**")
+    st.caption(f"**{total_xp} XP** ACQUIS • PROCHAIN : **{xp_needed} XP**")
 
-# La barre de progression juste en dessous, sur toute la largeur
 st.progress(progress_pct / 100)
 st.write("---")
-
 
 # === LAYOUT PRINCIPAL ===
 col_left, col_right = st.columns([1, 2], gap="large")
@@ -122,14 +121,14 @@ col_left, col_right = st.columns([1, 2], gap="large")
 # GAUCHE : TÂCHES
 with col_left:
     st.markdown('<p class="section-header">📌 TÂCHES</p>', unsafe_allow_html=True)
-    new_t = st.text_input("Ajouter une tâche...", label_visibility="collapsed")
+    new_t = st.text_input("Ajouter...", label_visibility="collapsed")
     if st.button("AJOUTER"):
         if new_t: add_task(new_t); st.rerun()
     
     st.write("")
     tasks = load_tasks()
     for i, t in enumerate(tasks):
-        c1, c2, c3 = st.columns([0.65, 0.25, 0.1])
+        c1, c2, c3 = st.columns([0.7, 0.2, 0.1])
         c1.text(t)
         if c2.button("✓", key=f"v_{i}"):
             save_xp(10, "Gestion", t); del_task(t); st.rerun()
@@ -139,26 +138,54 @@ with col_left:
 # DROITE : ACTIONS
 with col_right:
     
-    # SPORT
+    # --- SECTION SPORT REVUE ---
     st.markdown('<p class="section-header">⚡ 01. SPORT (FULL BODY)</p>', unsafe_allow_html=True)
-    c_s1, c_s2 = st.columns(2)
-    with c_s1:
-        if st.button("⏱️ CHRONO 20 MIN"):
+    
+    c_home, c_gym = st.columns(2, gap="medium")
+    
+    # COLONNE 1 : MAISON
+    with c_home:
+        st.markdown("##### 🏠 MAISON")
+        if st.button("⏱️ TIMER (20 MIN)"):
             ph = st.empty()
             for s in range(20*60, -1, -1):
                 m, sec = divmod(s, 60)
                 ph.markdown(f'<h2 style="text-align:center;">{m:02d}:{sec:02d}</h2>', unsafe_allow_html=True)
                 time.sleep(1)
-        if st.button("MAISON (+20 XP)"):
+        
+        st.write("") # Espace
+        if st.button("✅ VALIDER MAISON (+20 XP)"):
             save_xp(20, "Force", "Maison"); st.rerun()
+
+    # COLONNE 2 : SALLE
+    with c_gym:
+        st.markdown("##### 🏋️ SALLE")
+        
+        # Bouton Générateur
+        if st.button("🎲 GÉNÉRER PROGRAMME"):
+            prog_name, prog_details = random.choice(list(FULL_BODY_PROGRAMS.items()))
+            st.session_state['gym_current_prog'] = (prog_name, prog_details)
+            st.rerun() # Refresh pour afficher
+
+        # Affichage du programme tiré au sort (Clean Display)
+        if st.session_state['gym_current_prog']:
+            name, details = st.session_state['gym_current_prog']
             
-    with c_s2:
-        # Ici je m'assure qu'on pioche bien dans les 8 programmes Full Body
-        choice = st.selectbox("SÉANCE", list(FULL_BODY_PROGRAMS.keys()))
-        if st.button("VOIR DÉTAILS"):
-            st.info(FULL_BODY_PROGRAMS[choice])
-        if st.button("SALLE (+50 XP)"):
-            save_xp(50, "Force", f"FB: {choice}"); st.rerun()
+            # Affichage stylisé
+            st.markdown(f"**🔥 {name}**")
+            
+            # On découpe le texte pour faire une liste propre
+            lignes = details.split('\n')
+            clean_text = ""
+            for l in lignes:
+                clean_text += f"- {l}\n"
+            
+            st.markdown(clean_text) # Affiche une vraie liste à puces
+
+            if st.button("✅ VALIDER SALLE (+50 XP)"):
+                save_xp(50, "Force", f"FB: {name}"); st.session_state['gym_current_prog'] = None; st.rerun()
+        else:
+            st.info("Clique sur le dé pour tirer une séance.")
 
     st.write("---")
 
