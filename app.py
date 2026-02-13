@@ -25,7 +25,7 @@ components.html(
     </script>""", height=0
 )
 
-# --- CSS (V47 - MOBILE, ZÉRO BLANC & BOSS ARENA) ---
+# --- CSS (V48) ---
 st.markdown("""
     <style>
     header { display: none !important; }
@@ -41,7 +41,7 @@ st.markdown("""
     .mana-fill { background: linear-gradient(90deg, #0056b3, #007bff); }
     .chaos-fill { background: linear-gradient(90deg, #800000, #a71d2a); }
 
-    /* BARRE DE VIE DU BOSS (STYLE JEU DE COMBAT) */
+    /* BARRE DE VIE DU BOSS */
     .boss-hp-container { background-color: #222; border: 3px solid #000; height: 35px; border-radius: 5px; overflow: hidden; margin: 20px 0; position: relative; box-shadow: 0 0 15px rgba(255,0,0,0.2); }
     .boss-hp-fill { background: linear-gradient(90deg, #ff0000, #990000); height: 100%; transition: width 1s ease-out; }
     .boss-hp-text { position: absolute; width: 100%; text-align: center; color: #fff; font-weight: 900; line-height: 35px; text-transform: uppercase; letter-spacing: 2px; text-shadow: 2px 2px 4px #000; }
@@ -65,6 +65,8 @@ st.markdown("""
     }
     .stButton>button:hover, .stFormSubmitButton>button:hover { border-color: #333; background-color: #333; color: white; }
 
+    .timer-box { font-family: 'Courier New', monospace; font-size: 2.2em; font-weight: bold; color: #d9534f; text-align: center; background-color: #fff; border: 2px solid #d9534f; border-radius: 8px; padding: 15px; margin: 10px 0; }
+
     /* MOBILE ADJUST */
     @media (max-width: 768px) {
         .bar-label { font-size: 0.65em; }
@@ -79,6 +81,9 @@ st.markdown("""
     .warning-marker + div > button { background: linear-gradient(135deg, #f0ad4e, #ec971f) !important; color: white !important; height: 48px !important; border: none !important; }
     .gold-banner { background: linear-gradient(135deg, #bf953f, #fcf6ba, #b38728, #fbf5b7); color: #5c4004; padding: 15px; text-align: center; border-radius: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; border: 2px solid #d4af37; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
     .sober-marker + div > button { background-color: transparent !important; color: #888 !important; border: 1px solid #ccc !important; font-size: 0.7em !important; height: 28px !important; min-height: 28px !important; text-transform: none !important; width: auto !important; margin-top: 5px; }
+    
+    .history-card { background: white; padding: 12px; border-radius: 8px; border-left: 5px solid #8A2BE2; margin-bottom: 10px; }
+    .achievement-card { background: white; padding: 20px; border-radius: 12px; border: 2px solid #FFD700; text-align: center; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -159,6 +164,8 @@ def create_cal_link(title):
 
 # --- INIT ---
 if 'current_page' not in st.session_state: st.session_state['current_page'] = "Dashboard"
+if 'gym_current_prog' not in st.session_state: st.session_state['gym_current_prog'] = None
+
 total_xp, current_mana, current_chaos, rent_paid, salt_paid, df_full = get_stats()
 niveau = 1 + (total_xp // 100)
 progress_pct = total_xp % 100
@@ -243,17 +250,36 @@ if st.session_state['current_page'] == "Dashboard":
                     save_xp(max(1, mins), "Intellect", "Anki"); st.session_state['anki_start_time'] = None; st.rerun()
 
         st.markdown('<div class="section-header">⚡ ENTRAÎNEMENT</div>', unsafe_allow_html=True)
-        cs1, cs2 = st.columns(2)
+        cs1, cs2 = st.columns(2, gap="medium")
+        
         with cs1:
             if st.button("⏱️ TIMER 20 MIN"):
                 p = st.empty()
                 for s in range(1200, -1, -1):
                     m, sc = divmod(s, 60); p.markdown(f'<div class="timer-box">{m:02d}:{sc:02d}</div>', unsafe_allow_html=True); time.sleep(1)
             st.button("VALIDER MAISON (+20 XP)", on_click=save_xp, args=(20, "Force", "Maison"))
+            
         with cs2:
-            if st.button("🎲 GÉNÉRER SÉANCE"): st.session_state['gym_p'] = random.choice(["Full Body Force", "Hypertrophie", "Cardio Intense"]); st.rerun()
-            if 'gym_p' in st.session_state: st.info(st.session_state['gym_p'])
-            st.button("VALIDER SALLE (+50 XP)", on_click=save_xp, args=(50, "Force", "Salle"))
+            FULL_BODY_PROGRAMS = {
+                "FB1. STRENGTH": "SQUAT 3x5\nBENCH 3x5\nROWING 3x6\nRDL 3x8\nPLANK 3x1min",
+                "FB2. HYPERTROPHY": "PRESSE 3x12\nTIRAGE 3x12\nCHEST PRESS 3x12\nLEG CURL 3x15\nELEVATIONS 3x15",
+                "FB3. POWER": "CLEAN 5x3\nJUMP LUNGE 3x8\nPULLUPS 4xMAX\nDIPS 4xMAX\nSWING 3x20",
+                "FB4. DUMBBELLS": "GOBLET SQUAT 4x10\nINCLINE PRESS 3x10\nROWING 3x12\nLUNGES 3x10\nARMS 3x12",
+                "FB7. CIRCUIT": "THRUSTERS x10\nRENEGADE ROW x8\nCLIMBERS x20\nPUSHUPS xMAX\nJUMPS x15"
+            }
+            if st.button("🎲 GÉNÉRER SÉANCE"):
+                n, d = random.choice(list(FULL_BODY_PROGRAMS.items()))
+                st.session_state['gym_current_prog'] = (n, d)
+                st.rerun()
+            
+            if st.session_state['gym_current_prog']:
+                n, d = st.session_state['gym_current_prog']
+                st.markdown(f"**{n}**")
+                for l in d.split('\n'): st.markdown(f"- {l}")
+                if st.button("VALIDER SALLE (+50 XP)"):
+                    save_xp(50, "Force", n)
+                    st.session_state['gym_current_prog'] = None
+                    st.rerun()
 
 elif st.session_state['current_page'] == "Donjon":
     st.markdown('<div class="section-header">⚔️ LES PROFONDEURS DU DONJON</div>', unsafe_allow_html=True)
@@ -262,7 +288,7 @@ elif st.session_state['current_page'] == "Donjon":
             n = st.text_input("Nom de l'Examen"); d = st.date_input("Date de l'échéance")
             if st.form_submit_button("SCELLER LE PACTE"):
                 try: get_db().worksheet("Bosses").append_row([n, d.strftime("%Y-%m-%d"), 0, 100]); st.rerun()
-                except: st.error("Onglet 'Bosses' manquant dans Excel !")
+                except: st.error("Crée l'onglet 'Bosses' dans ton Google Sheets !")
     
     df_b = load_bosses()
     if df_b.empty: st.write("Donjon vide. Invoque un Boss pour commencer.")
@@ -278,11 +304,13 @@ elif st.session_state['current_page'] == "Donjon":
                 if up:
                     content = up.getvalue().decode("utf-8").splitlines()
                     chapters = [line.strip() for line in content if line.strip()]
-                    ws_t = get_db().worksheet("Boss_Tasks"); ws_b = get_db().worksheet("Bosses")
-                    for c in chapters: ws_t.append_row([b_name, c])
-                    row_idx = ws_b.find(b_name).row
-                    ws_b.update_cell(row_idx, 3, len(chapters)) # Total_Initial
-                    st.rerun()
+                    try:
+                        ws_t = get_db().worksheet("Boss_Tasks"); ws_b = get_db().worksheet("Bosses")
+                        for c in chapters: ws_t.append_row([b_name, c])
+                        row_idx = ws_b.find(b_name).row
+                        ws_b.update_cell(row_idx, 3, len(chapters)) # Total_Initial
+                        st.rerun()
+                    except: st.error("Crée l'onglet 'Boss_Tasks' dans ton Google Sheets !")
             elif pv > 0:
                 dmg = 100 / b['Total_Initial']
                 st.write("### 🗡️ CHOISIS TON ATTAQUE (ARSENAL)")
