@@ -25,7 +25,7 @@ components.html(
     </script>""", height=0
 )
 
-# --- CSS (V48) ---
+# --- CSS (V49) ---
 st.markdown("""
     <style>
     header { display: none !important; }
@@ -235,11 +235,22 @@ if st.session_state['current_page'] == "Dashboard":
         cc1, cc2 = st.columns(2, gap="medium")
         with cc1:
             st.caption("📜 **GRIMOIRE**")
+            
+            # --- RESTAURATION DE L'IMPORTER TXT DU GRIMOIRE ---
+            with st.expander("📥 IMPORTER TXT"):
+                up = st.file_uploader("Fichier .txt", type="txt", key="grim_up")
+                if up and st.button("IMPORTER"):
+                    for l in up.getvalue().decode("utf-8").splitlines():
+                        if l.strip(): add_task(l.strip(), 2)
+                    st.rerun()
+            # ---------------------------------------------------
+            
             with st.form("a_f", clear_on_submit=True):
                 na = st.text_input("Cours...", label_visibility="collapsed")
                 if st.form_submit_button("AJOUTER"): add_task(na, 2); st.rerun()
             for i, t in enumerate(load_tasks_v2(2)):
                 st.write(f"**{t}**"); st.button("✓", key=f"v_{i}", on_click=save_xp, args=(30, "Intellect", t))
+                
         with cc2:
             st.caption("⚔️ **COMBAT**")
             if 'anki_start_time' not in st.session_state or st.session_state['anki_start_time'] is None:
@@ -280,6 +291,8 @@ if st.session_state['current_page'] == "Dashboard":
                     save_xp(50, "Force", n)
                     st.session_state['gym_current_prog'] = None
                     st.rerun()
+            else:
+                st.button("VALIDER SALLE (+50 XP)", on_click=save_xp, args=(50, "Force", "Salle"))
 
 elif st.session_state['current_page'] == "Donjon":
     st.markdown('<div class="section-header">⚔️ LES PROFONDEURS DU DONJON</div>', unsafe_allow_html=True)
