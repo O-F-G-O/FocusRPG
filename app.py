@@ -25,7 +25,7 @@ components.html(
     </script>""", height=0
 )
 
-# --- CSS (V50) ---
+# --- CSS (V51) ---
 st.markdown("""
     <style>
     header { display: none !important; }
@@ -42,7 +42,7 @@ st.markdown("""
     .chaos-fill { background: linear-gradient(90deg, #800000, #a71d2a); }
 
     /* BARRE DE VIE DU BOSS */
-    .boss-hp-container { background-color: #222; border: 3px solid #000; height: 35px; border-radius: 5px; overflow: hidden; margin: 20px 0; position: relative; box-shadow: 0 0 15px rgba(255,0,0,0.2); }
+    .boss-hp-container { background-color: #222; border: 3px solid #000; height: 35px; border-radius: 5px; overflow: hidden; margin: 10px 0 20px 0; position: relative; box-shadow: 0 0 15px rgba(255,0,0,0.2); }
     .boss-hp-fill { background: linear-gradient(90deg, #ff0000, #990000); height: 100%; transition: width 1s ease-out; }
     .boss-hp-text { position: absolute; width: 100%; text-align: center; color: #fff; font-weight: 900; line-height: 35px; text-transform: uppercase; letter-spacing: 2px; text-shadow: 2px 2px 4px #000; }
 
@@ -106,7 +106,6 @@ def add_task(t, col_idx):
         ws.update_cell(len(col_vals) + 1, col_idx, t)
     except: pass
 
-# NOUVEAU: Importation Batch (Anti-Crash)
 def add_multiple_tasks(tasks, col_idx):
     try:
         ws = get_db().worksheet("Tasks")
@@ -115,7 +114,7 @@ def add_multiple_tasks(tasks, col_idx):
         cell_list = ws.range(start_row, col_idx, start_row + len(tasks) - 1, col_idx)
         for i, cell in enumerate(cell_list):
             cell.value = tasks[i]
-        ws.update_cells(cell_list) # Un seul appel API !
+        ws.update_cells(cell_list)
     except Exception as e:
         st.error(f"Erreur d'import : {e}")
 
@@ -145,7 +144,7 @@ def get_stats():
         salt = not df[df['Date'].str.contains(cur_m, na=False) & df['Commentaire'].str.contains("Salt", na=False)].empty
         return xp, mana, chaos, rent, salt, df
     except Exception as e: 
-        st.error("⏳ Google synchronise l'API. Recharge la page dans quelques secondes.")
+        st.error("⏳ Google synchronise l'API. Recharge la page.")
         return 0, 100, 0, False, False, pd.DataFrame()
 
 # --- BOSS ENGINE ---
@@ -320,8 +319,22 @@ elif st.session_state['current_page'] == "Donjon":
     if df_b.empty: st.write("Donjon vide. Invoque un Boss pour commencer.")
     else:
         for _, b in df_b.iterrows():
-            pv = b['PV_Restants']; b_name = b['Nom']
-            st.markdown(f"## 👹 {b_name}")
+            pv = b['PV_Restants']; b_name = b['Nom']; b_date_str = str(b['Date'])
+            
+            # --- CALCUL DU COMPTE À REBOURS ---
+            try:
+                days_left = (datetime.strptime(b_date_str, "%Y-%m-%d").date() - datetime.now().date()).days
+                if days_left > 0:
+                    timer_txt = f"⏳ {b_date_str} (J-{days_left})"
+                elif days_left == 0:
+                    timer_txt = "🔥 JOUR J !"
+                else:
+                    timer_txt = f"💀 DÉPASSÉ (J+{abs(days_left)})"
+            except:
+                timer_txt = ""
+
+            # Affichage du titre avec le timer à côté
+            st.markdown(f"## 👹 {b_name} <span style='font-size: 0.5em; color: #d9534f; margin-left: 15px;'>{timer_txt}</span>", unsafe_allow_html=True)
             st.markdown(f'<div class="boss-hp-container"><div class="boss-hp-text">{int(pv)}% PV RESTANTS</div><div class="boss-hp-fill" style="width:{pv}%"></div></div>', unsafe_allow_html=True)
             
             df_c = load_boss_chapters(b_name)
@@ -331,10 +344,9 @@ elif st.session_state['current_page'] == "Donjon":
                     content = up.getvalue().decode("utf-8").splitlines()
                     chapters = [line.strip() for line in content if line.strip()]
                     try:
-                        # NOUVEAU: Importation Batch (Anti-Crash)
                         ws_t = get_db().worksheet("Boss_Tasks")
                         rows = [[b_name, c] for c in chapters]
-                        ws_t.append_rows(rows) # Un seul appel API !
+                        ws_t.append_rows(rows)
                         
                         ws_b = get_db().worksheet("Bosses")
                         row_idx = ws_b.find(b_name).row
