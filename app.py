@@ -25,7 +25,7 @@ components.html(
     </script>""", height=0
 )
 
-# --- CSS (V49) ---
+# --- CSS (V50) ---
 st.markdown("""
     <style>
     header { display: none !important; }
@@ -106,6 +106,19 @@ def add_task(t, col_idx):
         ws.update_cell(len(col_vals) + 1, col_idx, t)
     except: pass
 
+# NOUVEAU: Importation Batch (Anti-Crash)
+def add_multiple_tasks(tasks, col_idx):
+    try:
+        ws = get_db().worksheet("Tasks")
+        col_vals = ws.col_values(col_idx)
+        start_row = len(col_vals) + 1
+        cell_list = ws.range(start_row, col_idx, start_row + len(tasks) - 1, col_idx)
+        for i, cell in enumerate(cell_list):
+            cell.value = tasks[i]
+        ws.update_cells(cell_list) # Un seul appel API !
+    except Exception as e:
+        st.error(f"Erreur d'import : {e}")
+
 def del_task(t, col_idx):
     try:
         ws = get_db().worksheet("Tasks"); cell = ws.find(t, in_column=col_idx)
@@ -131,7 +144,9 @@ def get_stats():
         rent = not df[df['Date'].str.contains(cur_m, na=False) & df['Commentaire'].str.contains("Loyer", na=False)].empty
         salt = not df[df['Date'].str.contains(cur_m, na=False) & df['Commentaire'].str.contains("Salt", na=False)].empty
         return xp, mana, chaos, rent, salt, df
-    except: return 0, 100, 0, False, False, pd.DataFrame()
+    except Exception as e: 
+        st.error("⏳ Google synchronise l'API. Recharge la page dans quelques secondes.")
+        return 0, 100, 0, False, False, pd.DataFrame()
 
 # --- BOSS ENGINE ---
 def load_bosses():
@@ -236,14 +251,12 @@ if st.session_state['current_page'] == "Dashboard":
         with cc1:
             st.caption("📜 **GRIMOIRE**")
             
-            # --- RESTAURATION DE L'IMPORTER TXT DU GRIMOIRE ---
             with st.expander("📥 IMPORTER TXT"):
                 up = st.file_uploader("Fichier .txt", type="txt", key="grim_up")
                 if up and st.button("IMPORTER"):
-                    for l in up.getvalue().decode("utf-8").splitlines():
-                        if l.strip(): add_task(l.strip(), 2)
+                    lines = [l.strip() for l in up.getvalue().decode("utf-8").splitlines() if l.strip()]
+                    if lines: add_multiple_tasks(lines, 2)
                     st.rerun()
-            # ---------------------------------------------------
             
             with st.form("a_f", clear_on_submit=True):
                 na = st.text_input("Cours...", label_visibility="collapsed")
@@ -318,8 +331,12 @@ elif st.session_state['current_page'] == "Donjon":
                     content = up.getvalue().decode("utf-8").splitlines()
                     chapters = [line.strip() for line in content if line.strip()]
                     try:
-                        ws_t = get_db().worksheet("Boss_Tasks"); ws_b = get_db().worksheet("Bosses")
-                        for c in chapters: ws_t.append_row([b_name, c])
+                        # NOUVEAU: Importation Batch (Anti-Crash)
+                        ws_t = get_db().worksheet("Boss_Tasks")
+                        rows = [[b_name, c] for c in chapters]
+                        ws_t.append_rows(rows) # Un seul appel API !
+                        
+                        ws_b = get_db().worksheet("Bosses")
                         row_idx = ws_b.find(b_name).row
                         ws_b.update_cell(row_idx, 3, len(chapters)) # Total_Initial
                         st.rerun()
