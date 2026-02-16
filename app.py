@@ -25,7 +25,7 @@ components.html(
     </script>""", height=0
 )
 
-# --- CSS (V53 - STABLE) ---
+# --- CSS (V54 - TOTAL RECALL) ---
 st.markdown("""
     <style>
     header { display: none !important; }
@@ -62,16 +62,16 @@ st.markdown("""
     .gold-banner { background: linear-gradient(135deg, #bf953f, #fcf6ba, #b38728, #fbf5b7); color: #5c4004; padding: 15px; text-align: center; border-radius: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; border: 2px solid #d4af37; }
     .timer-box { font-family: 'Courier New', monospace; font-size: 2.2em; font-weight: bold; color: #d9534f; text-align: center; background-color: #fff; border: 2px solid #d9534f; border-radius: 8px; padding: 15px; margin: 10px 0; }
     .history-card { background: white; padding: 12px; border-radius: 8px; border-left: 5px solid #8A2BE2; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .achievement-card { background: white; padding: 20px; border-radius: 12px; border: 2px solid #FFD700; text-align: center; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- DB ENGINE ---
+# --- ENGINE ---
 def get_db():
     secrets = st.secrets["connections"]["gsheets"]
     creds = Credentials.from_service_account_info(secrets, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
     return gspread.authorize(creds).open_by_url(secrets["spreadsheet"])
 
-# --- LEVEL & STREAK ---
 def get_level_data(total_xp):
     level, xp_needed = 1, 100
     while total_xp >= xp_needed:
@@ -92,7 +92,6 @@ def calculate_streak(df):
         else: break
     return streak
 
-# --- XP & TASKS ---
 def save_xp(amt, type_s, cmt=""):
     try:
         db = get_db().worksheet("Data")
@@ -119,16 +118,6 @@ def del_task(t, col_idx):
         if cell: ws.update_cell(cell.row, col_idx, "")
     except: pass
 
-def add_multiple_tasks(tasks, col_idx):
-    try:
-        ws = get_db().worksheet("Tasks")
-        start = len(ws.col_values(col_idx)) + 1
-        cells = ws.range(start, col_idx, start + len(tasks) - 1, col_idx)
-        for i, c in enumerate(cells): c.value = tasks[i]
-        ws.update_cells(cells)
-    except: pass
-
-# --- BOSS ENGINE ---
 def attack_boss(b_name, chap, dmg):
     db = get_db()
     ws_t = db.worksheet("Boss_Tasks"); cell = ws_t.find(chap)
@@ -139,19 +128,23 @@ def attack_boss(b_name, chap, dmg):
 
 # --- INIT ---
 if 'current_page' not in st.session_state: st.session_state['current_page'] = "Dashboard"
+if 'gym_current_prog' not in st.session_state: st.session_state['gym_current_prog'] = None
+
 try:
     df_raw = pd.DataFrame(get_db().worksheet("Data").get_all_records())
     total_xp = int(pd.to_numeric(df_raw["XP"], errors='coerce').sum()) if not df_raw.empty else 0
     lvl, xp_in, xp_req = get_level_data(total_xp)
     streak = calculate_streak(df_raw)
     loss = 8 if lvl >= 10 else 10
-    anki = df_raw[df_raw['Commentaire'].str.contains("Combat", na=False)]
-    mana = 100 if anki.empty else max(0, 100 - ((datetime.now() - datetime.strptime(anki.iloc[-1]['Date'], "%Y-%m-%d %H:%M")).days * loss))
-    chaos = 0 if df_raw[df_raw['Type'].str.contains("Gestion", na=False)].empty else min(100, (datetime.now() - datetime.strptime(df_raw[df_raw['Type'].str.contains("Gestion", na=False)].iloc[-1]['Date'], "%Y-%m-%d %H:%M")).days * 3)
+    anki_df = df_raw[df_raw['Commentaire'].str.contains("Combat", na=False)]
+    mana = 100 if anki_df.empty else max(0, 100 - ((datetime.now() - datetime.strptime(anki_df.iloc[-1]['Date'], "%Y-%m-%d %H:%M")).days * loss))
+    chaos_df = df_raw[df_raw['Type'].str.contains("Gestion", na=False)]
+    chaos = 0 if chaos_df.empty else min(100, (datetime.now() - datetime.strptime(chaos_df.iloc[-1]['Date'], "%Y-%m-%d %H:%M")).days * 3)
     cur_m = datetime.now().strftime("%Y-%m")
     rent = not df_raw[df_raw['Date'].str.contains(cur_m, na=False) & df_raw['Commentaire'].str.contains("Loyer", na=False)].empty
     salt = not df_raw[df_raw['Date'].str.contains(cur_m, na=False) & df_raw['Commentaire'].str.contains("Salt", na=False)].empty
-except: total_xp, lvl, xp_in, xp_req, streak, mana, chaos, rent, salt, df_raw = 0, 1, 0, 100, 0, 100, 0, False, False, pd.DataFrame()
+except: 
+    total_xp, lvl, xp_in, xp_req, streak, mana, chaos, rent, salt, df_raw = 0, 1, 0, 100, 0, 100, 0, False, False, pd.DataFrame()
 
 # ==============================================================================
 # HEADER
@@ -160,8 +153,10 @@ c_av, c_main, c_nav = st.columns([0.15, 0.60, 0.25])
 with c_av: st.image("avatar.png", width=70)
 with c_main:
     st.markdown(f"<h3 style='margin:0;'>NIVEAU {lvl} | SELECTA <span class='streak-fire'>🔥 {streak}</span></h3>", unsafe_allow_html=True)
-    if lvl >= 5: st.markdown("<span class='buff-badge'>🧠 Érudit (+10% Intellect)</span>", unsafe_allow_html=True)
-    if lvl >= 10: st.markdown("<span class='buff-badge'>🛡️ Mémoire d'Or (-8% Decay)</span>", unsafe_allow_html=True)
+    buffs = ""
+    if lvl >= 5: buffs += "<span class='buff-badge'>🧠 Érudit (+10% Intellect)</span>"
+    if lvl >= 10: buffs += "<span class='buff-badge'>🛡️ Mémoire d'Or (-8% Decay)</span>"
+    if buffs: st.markdown(buffs, unsafe_allow_html=True)
     st.caption(f"{int(xp_req - xp_in)} XP requis pour le niveau {lvl+1}")
 with c_nav:
     n1, n2, n3, n4 = st.columns(4)
@@ -172,15 +167,13 @@ with c_nav:
 
 st.write("") 
 c_b1, c_b2, c_b3 = st.columns(3)
-def draw_bar(l, v, c):
-    st.markdown(f'<div class="bar-label"><span>{l}</span><span>{int(v)}%</span></div><div class="bar-container"><div class="bar-fill {c}" style="width:{v}%"></div></div>', unsafe_allow_html=True)
 draw_bar("EXPÉRIENCE", (xp_in/xp_req)*100, "xp-fill")
 draw_bar("MÉMOIRE", mana, "mana-fill")
 draw_bar("CHAOS", chaos, "chaos-fill")
 st.markdown("---")
 
 # ==============================================================================
-# PAGES
+# DASHBOARD
 # ==============================================================================
 if st.session_state['current_page'] == "Dashboard":
     col_l, col_r = st.columns([1, 1.2], gap="large")
@@ -189,8 +182,7 @@ if st.session_state['current_page'] == "Dashboard":
         with st.form("t_f", clear_on_submit=True):
             nt = st.text_input("Quête...", label_visibility="collapsed")
             if st.form_submit_button("AJOUTER"):
-                try: ws=get_db().worksheet("Tasks"); ws.update_cell(len(ws.col_values(1))+1, 1, nt); st.rerun()
-                except: pass
+                ws=get_db().worksheet("Tasks"); ws.update_cell(len(ws.col_values(1))+1, 1, nt); st.rerun()
         for i, t in enumerate(load_tasks_v2(1)):
             cl1, cl2, cl3 = st.columns([0.7, 0.15, 0.15])
             cl1.write(f"• {t}")
@@ -217,15 +209,14 @@ if st.session_state['current_page'] == "Dashboard":
                 up = st.file_uploader(".txt", type="txt", key="gup")
                 if up and st.button("GO"):
                     ls = [l.strip() for l in up.getvalue().decode().splitlines() if l.strip()]
-                    if ls: add_multiple_tasks(ls, 2)
-                    st.rerun()
+                    if ls: 
+                        ws = get_db().worksheet("Tasks"); start = len(ws.col_values(2)) + 1
+                        cells = ws.range(start, 2, start + len(ls) - 1, 2)
+                        for i, c in enumerate(cells): c.value = ls[i]
+                        ws.update_cells(cells); st.rerun()
             for i, t in enumerate(load_tasks_v2(2)):
                 st.write(f"**{t}**")
-                # FIX V53: Ajout de del_task(t, 2) pour faire disparaître le cours
-                if st.button("✓", key=f"v_{i}"):
-                    save_xp(30, "Intellect", t)
-                    del_task(t, 2)
-                    st.rerun()
+                if st.button("✓", key=f"v_{i}"): save_xp(30, "Intellect", t); del_task(t, 2); st.rerun()
         with cc2:
             st.caption("⚔️ **COMBAT**")
             if 'anki_start_time' not in st.session_state:
@@ -235,6 +226,34 @@ if st.session_state['current_page'] == "Dashboard":
                     m = int((datetime.now() - st.session_state['anki_start_time']).total_seconds() // 60)
                     save_xp(max(1, m), "Intellect", "Anki"); del st.session_state['anki_start_time']; st.rerun()
 
+        st.markdown('<div class="section-header">⚡ ENTRAÎNEMENT</div>', unsafe_allow_html=True)
+        cs1, cs2 = st.columns(2)
+        with cs1:
+            if st.button("⏱️ TIMER 20 MIN"):
+                p = st.empty()
+                for s in range(1200, -1, -1):
+                    m, sc = divmod(s, 60); p.markdown(f'<div class="timer-box">{m:02d}:{sc:02d}</div>', unsafe_allow_html=True); time.sleep(1)
+            st.button("VALIDER MAISON (+20 XP)", on_click=save_xp, args=(20, "Force", "Maison"))
+        with cs2:
+            FULL_BODY = {
+                "FB1. STRENGTH": "SQUAT 3x5\nBENCH 3x5\nROWING 3x6\nRDL 3x8\nPLANK 3x1min",
+                "FB2. HYPERTROPHY": "PRESSE 3x12\nTIRAGE 3x12\nCHEST PRESS 3x12\nLEG CURL 3x15\nELEVATIONS 3x15",
+                "FB3. POWER": "CLEAN 5x3\nJUMP LUNGE 3x8\nPULLUPS 4xMAX\nDIPS 4xMAX\nSWING 3x20",
+                "FB4. DUMBBELLS": "GOBLET SQUAT 4x10\nINCLINE PRESS 3x10\nROWING 3x12\nLUNGES 3x10\nARMS 3x12",
+                "FB7. CIRCUIT": "THRUSTERS x10\nRENEGADE ROW x8\nCLIMBERS x20\nPUSHUPS xMAX\nJUMPS x15"
+            }
+            if st.button("🎲 GÉNÉRER SÉANCE"):
+                st.session_state['gym_current_prog'] = random.choice(list(FULL_BODY.items())); st.rerun()
+            if st.session_state['gym_current_prog']:
+                n, d = st.session_state['gym_current_prog']; st.markdown(f"**{n}**")
+                for l in d.split('\n'): st.markdown(f"- {l}")
+                if st.button("VALIDER SALLE (+50 XP)"):
+                    save_xp(50, "Force", n); st.session_state['gym_current_prog'] = None; st.rerun()
+            else: st.button("VALIDER SALLE (+50 XP)", on_click=save_xp, args=(50, "Force", "Salle"))
+
+# ==============================================================================
+# AUTRES PAGES
+# ==============================================================================
 elif st.session_state['current_page'] == "Donjon":
     st.markdown('<div class="section-header">⚔️ LES PROFONDEURS DU DONJON</div>', unsafe_allow_html=True)
     with st.expander("➕ INVOQUER UN BOSS"):
@@ -243,13 +262,15 @@ elif st.session_state['current_page'] == "Donjon":
             if st.form_submit_button("SCELLER"):
                 get_db().worksheet("Bosses").append_row([n, d.strftime("%Y-%m-%d"), 0, 100]); st.rerun()
     try:
-        for _, b in pd.DataFrame(get_db().worksheet("Bosses").get_all_records()).iterrows():
+        df_b = pd.DataFrame(get_db().worksheet("Bosses").get_all_records())
+        for _, b in df_b.iterrows():
             pv = b['PV_Restants']
             try: days = (pd.to_datetime(b['Date']).date() - datetime.now().date()).days
             except: days = "?"
             st.markdown(f"## 👹 {b['Nom']} <span style='font-size:0.5em;color:#d9534f;margin-left:15px;'>⏳ J-{days}</span>", unsafe_allow_html=True)
             st.markdown(f'<div class="boss-hp-container"><div class="boss-hp-text">{int(pv)}% PV</div><div class="boss-hp-fill" style="width:{pv}%"></div></div>', unsafe_allow_html=True)
-            df_c = load_boss_chapters(b['Nom'])
+            df_c = pd.DataFrame(get_db().worksheet("Boss_Tasks").get_all_records())
+            df_c = df_c[df_c['Boss_Nom'] == b['Nom']]
             if df_c.empty and pv > 0:
                 up = st.file_uploader(f"Munitions {b['Nom']}", type="txt", key=f"u{b['Nom']}")
                 if up:
@@ -257,8 +278,7 @@ elif st.session_state['current_page'] == "Donjon":
                     ws_t = get_db().worksheet("Boss_Tasks"); ws_t.append_rows([[b['Nom'], c] for c in content])
                     ws_b = get_db().worksheet("Bosses"); row = ws_b.find(b['Nom']).row; ws_b.update_cell(row, 3, len(content)); st.rerun()
             elif pv > 0:
-                dmg = 100 / b['Total_Initial']
-                cols = st.columns(2)
+                dmg = 100 / b['Total_Initial']; cols = st.columns(2)
                 for i, row in enumerate(df_c.iterrows()):
                     with cols[i%2]:
                         if st.button(f"🔥 {row[1]['Chapitre']}", key=f"a{b['Nom']}{i}"):
@@ -272,3 +292,15 @@ elif st.session_state['current_page'] == "Histoire":
     if not df_raw.empty:
         for _, r in df_raw.iloc[::-1].head(15).iterrows():
             st.markdown(f'<div class="history-card"><b>{r["Date"]}</b> | {r["Type"]} | <b>+{r["XP"]} XP</b><br>{r["Commentaire"]}</div>', unsafe_allow_html=True)
+
+elif st.session_state['current_page'] == "HautsFaits":
+    st.markdown('<div class="section-header">🏆 SALLE DES HAUTS FAITS</div>', unsafe_allow_html=True)
+    if df_raw.empty: st.write("Aucun exploit.")
+    else:
+        h1, h2, h3 = st.columns(3)
+        with h1: 
+            if lvl >= 2: st.markdown('<div class="achievement-card">🎖️<br><b>NOVICE</b><br><small>Niv. 2 atteint</small></div>', unsafe_allow_html=True)
+        with h2:
+            if any(df_raw['Commentaire'].str.contains("LOYER", na=False)): st.markdown('<div class="achievement-card">💰<br><b>LOYAL</b><br><small>Loyer payé</small></div>', unsafe_allow_html=True)
+        with h3:
+            if len(df_raw[df_raw['Commentaire'].str.contains("Anki", na=False)]) >= 10: st.markdown('<div class="achievement-card">🔥<br><b>ASSIDU</b><br><small>10 sessions Anki</small></div>', unsafe_allow_html=True)
