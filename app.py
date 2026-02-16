@@ -25,7 +25,7 @@ components.html(
     </script>""", height=0
 )
 
-# --- CSS (V55) ---
+# --- CSS (V56 - STABLE) ---
 st.markdown("""
     <style>
     header { display: none !important; }
@@ -33,7 +33,6 @@ st.markdown("""
     .block-container { padding-top: 1rem !important; margin-top: -2rem !important; }
     .stApp { background-color: #f4f6f9; color: #333; }
 
-    /* BARRES STATS */
     .bar-label { font-weight: 700; font-size: 0.8em; color: #555; margin-bottom: 5px; display: flex; justify-content: space-between; }
     .bar-container { background-color: #e9ecef; border-radius: 8px; width: 100%; height: 16px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); overflow: hidden; }
     .bar-fill { height: 100%; border-radius: 8px; transition: width 0.6s ease-in-out; }
@@ -41,12 +40,10 @@ st.markdown("""
     .mana-fill { background: linear-gradient(90deg, #0056b3, #007bff); }
     .chaos-fill { background: linear-gradient(90deg, #800000, #a71d2a); }
 
-    /* BOSS */
     .boss-hp-container { background-color: #222; border: 3px solid #000; height: 35px; border-radius: 5px; overflow: hidden; margin: 10px 0 20px 0; position: relative; }
     .boss-hp-fill { background: linear-gradient(90deg, #ff0000, #990000); height: 100%; transition: width 1s ease-out; }
     .boss-hp-text { position: absolute; width: 100%; text-align: center; color: #fff; font-weight: 900; line-height: 35px; text-transform: uppercase; text-shadow: 2px 2px 4px #000; }
 
-    /* UI */
     .section-header { font-size: 1.1em; font-weight: 800; text-transform: uppercase; color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; margin-bottom: 15px; margin-top: 20px; }
     .stButton>button { width: 100%; min-height: 40px; border: 1px solid #bbb; border-radius: 6px; background-color: white; color: #333; font-weight: 600; text-transform: uppercase; font-size: 0.85em; }
     .stButton>button:hover { border-color: #333; background-color: #333; color: white; }
@@ -57,7 +54,6 @@ st.markdown("""
     .atk-btn > div > button { background: linear-gradient(135deg, #ffffff, #f0f0f0) !important; color: #444 !important; border: 1px solid #ccc !important; text-transform: none !important; }
     .atk-btn > div > button:hover { background: #333 !important; color: #fff !important; transform: scale(1.02); }
 
-    /* MOBILE ADJUST */
     @media (max-width: 768px) {
         .bar-label { font-size: 0.65em; }
         .bar-container { height: 12px; }
@@ -86,15 +82,17 @@ def get_level_data(total_xp):
 
 def calculate_streak(df):
     if df.empty: return 0
-    df['D'] = pd.to_datetime(df['Date']).dt.date
-    dates = sorted(df['D'].unique(), reverse=True)
-    today = datetime.now().date()
-    if not dates or (dates[0] != today and dates[0] != today - timedelta(days=1)): return 0
-    streak, check = 0, dates[0]
-    for d in dates:
-        if d == check: streak += 1; check -= timedelta(days=1)
-        else: break
-    return streak
+    try:
+        df['D'] = pd.to_datetime(df['Date']).dt.date
+        dates = sorted(df['D'].unique(), reverse=True)
+        today = datetime.now().date()
+        if not dates or (dates[0] != today and dates[0] != today - timedelta(days=1)): return 0
+        streak, check = 0, dates[0]
+        for d in dates:
+            if d == check: streak += 1; check -= timedelta(days=1)
+            else: break
+        return streak
+    except: return 0
 
 def save_xp(amt, type_s, cmt=""):
     try:
@@ -136,48 +134,41 @@ def create_cal_link(title):
     end = (datetime.now() + timedelta(days=1)).replace(hour=11, minute=0, second=0).strftime('%Y%m%dT%H%M00')
     return f"{base}&text={urllib.parse.quote('[RPG] '+title)}&dates={now}/{end}"
 
-# --- INITIALISATION SÉCURISÉE DES VARIABLES ---
-# Valeurs par défaut (Anti-Crash)
-total_xp = 0
-lvl = 1
-xp_in_level = 0
-xp_req_level = 100
-current_streak = 0
-mana = 100
-chaos = 0
-rent_paid = False
-salt_paid = False
-df_full = pd.DataFrame()
+# --- INITIALISATION SÉCURISÉE (SAFE LOAD) ---
+# 1. Variables par défaut pour éviter le NameError
+total_xp, lvl, xp_in_level, xp_req_level = 0, 1, 0, 100
+current_streak, mana, chaos = 0, 100, 0
+rent_paid, salt_paid = False, False
+df_raw = pd.DataFrame()
 
-# Chargement des données (Try/Except)
+# 2. Chargement des données séparé pour éviter le crash global
 try:
-    df_full = pd.DataFrame(get_db().worksheet("Data").get_all_records())
-    if not df_full.empty:
-        total_xp = int(pd.to_numeric(df_full["XP"], errors='coerce').sum())
+    df_raw = pd.DataFrame(get_db().worksheet("Data").get_all_records())
+except: pass # Si Google échoue, on garde df vide
+
+# 3. Calculs si données disponibles
+if not df_raw.empty:
+    try:
+        total_xp = int(pd.to_numeric(df_raw["XP"], errors='coerce').sum())
         lvl, xp_in_level, xp_req_level = get_level_data(total_xp)
-        current_streak = calculate_streak(df_full)
+        current_streak = calculate_streak(df_raw)
         
         # Mana Logic
         loss_rate = 8 if lvl >= 10 else 10
-        anki_logs = df_full[df_full['Commentaire'].str.contains("Combat", case=False, na=False)]
-        if not anki_logs.empty:
-            last_anki = datetime.strptime(anki_logs.iloc[-1]['Date'], "%Y-%m-%d %H:%M")
-            mana = max(0, 100 - ((datetime.now() - last_anki).days * loss_rate))
+        anki_df = df_raw[df_raw['Commentaire'].str.contains("Combat", na=False)]
+        if not anki_df.empty:
+            mana = max(0, 100 - ((datetime.now() - datetime.strptime(anki_df.iloc[-1]['Date'], "%Y-%m-%d %H:%M")).days * loss_rate))
         
         # Chaos Logic
-        admin_logs = df_full[df_full['Type'].str.contains("Gestion", case=False, na=False)]
-        if not admin_logs.empty:
-            last_admin = datetime.strptime(admin_logs.iloc[-1]['Date'], "%Y-%m-%d %H:%M")
-            chaos = min(100, (datetime.now() - last_admin).days * 3)
+        chaos_df = df_raw[df_raw['Type'].str.contains("Gestion", na=False)]
+        if not chaos_df.empty:
+            chaos = min(100, (datetime.now() - datetime.strptime(chaos_df.iloc[-1]['Date'], "%Y-%m-%d %H:%M")).days * 3)
             
         # Paiements
         cur_m = datetime.now().strftime("%Y-%m")
-        rent_paid = not df_full[df_full['Date'].str.contains(cur_m, na=False) & df_full['Commentaire'].str.contains("Loyer", na=False)].empty
-        salt_paid = not df_full[df_full['Date'].str.contains(cur_m, na=False) & df_full['Commentaire'].str.contains("Salt", na=False)].empty
-
-except Exception as e:
-    # Si Google échoue, on reste sur les valeurs par défaut (0) et on log l'erreur si besoin
-    pass
+        rent_paid = not df_raw[df_raw['Date'].str.contains(cur_m, na=False) & df_raw['Commentaire'].str.contains("Loyer", na=False)].empty
+        salt_paid = not df_raw[df_raw['Date'].str.contains(cur_m, na=False) & df_raw['Commentaire'].str.contains("Salt", na=False)].empty
+    except: pass # Si un calcul échoue, on garde les valeurs par défaut pour cette stat
 
 # --- SESSION STATE ---
 if 'current_page' not in st.session_state: st.session_state['current_page'] = "Dashboard"
@@ -194,7 +185,9 @@ with c_main:
     if lvl >= 5: buffs += "<span class='buff-badge'>🧠 Érudit (+10% Intellect)</span>"
     if lvl >= 10: buffs += "<span class='buff-badge'>🛡️ Mémoire d'Or (-8% Decay)</span>"
     if buffs: st.markdown(buffs, unsafe_allow_html=True)
-    st.caption(f"{int(xp_req_level - xp_in_level)} XP requis pour le niveau {lvl+1}")
+    
+    req_txt = int(xp_req_level - xp_in_level) if xp_req_level > 0 else 0
+    st.caption(f"{req_txt} XP requis pour le niveau {lvl+1}")
 
 with c_nav:
     n1, n2, n3, n4 = st.columns(4)
@@ -209,19 +202,18 @@ def draw_bar(l, v, c):
     st.markdown(f'<div class="bar-label"><span>{l}</span><span>{int(v)}%</span></div><div class="bar-container"><div class="bar-fill {c}" style="width:{v}%"></div></div>', unsafe_allow_html=True)
 
 # Affichage sécurisé des barres
-draw_bar("EXPÉRIENCE", (xp_in_level/xp_req_level)*100 if xp_req_level > 0 else 0, "xp-fill")
-draw_bar("MÉMOIRE", mana, "mana-fill")
-draw_bar("CHAOS", chaos, "chaos-fill")
+xp_pct = (xp_in_level/xp_req_level)*100 if xp_req_level > 0 else 0
+with c_b1: draw_bar("EXPÉRIENCE", xp_pct, "xp-fill")
+with c_b2: draw_bar("MÉMOIRE", mana, "mana-fill")
+with c_b3: draw_bar("CHAOS", chaos, "chaos-fill")
 st.markdown("---")
 
 # ==============================================================================
-# PAGES
+# DASHBOARD
 # ==============================================================================
-
 if st.session_state['current_page'] == "Dashboard":
     col_l, col_r = st.columns([1, 1.2], gap="large")
     
-    # --- COLONNE GAUCHE ---
     with col_l:
         st.markdown('<div class="section-header">📌 QUÊTES DU JOUR</div>', unsafe_allow_html=True)
         with st.form("t_f", clear_on_submit=True):
@@ -252,7 +244,6 @@ if st.session_state['current_page'] == "Dashboard":
         with c2: st.button("✍️ RÉPONDRE", on_click=save_xp, args=(10, "Gestion", "Réponse"))
         with c3: st.button("📅 AGENDA", on_click=save_xp, args=(10, "Gestion", "Agenda"))
 
-    # --- COLONNE DROITE ---
     with col_r:
         st.markdown('<div class="section-header">🧠 FORGE DU SAVOIR</div>', unsafe_allow_html=True)
         cc1, cc2 = st.columns(2)
@@ -272,7 +263,7 @@ if st.session_state['current_page'] == "Dashboard":
                 st.write(f"**{t}**")
                 if st.button("✓", key=f"v_{i}"): 
                     save_xp(30, "Intellect", t)
-                    del_task(t, 2) # Suppression immédiate
+                    del_task(t, 2)
                     st.rerun()
                     
         with cc2:
@@ -284,7 +275,6 @@ if st.session_state['current_page'] == "Dashboard":
                     m = int((datetime.now() - st.session_state['anki_start_time']).total_seconds() // 60)
                     save_xp(max(1, m), "Intellect", "Anki"); del st.session_state['anki_start_time']; st.rerun()
 
-        # --- SECTION SPORT RESTAURÉE ---
         st.markdown('<div class="section-header">⚡ ENTRAÎNEMENT</div>', unsafe_allow_html=True)
         cs1, cs2 = st.columns(2)
         with cs1:
@@ -315,6 +305,9 @@ if st.session_state['current_page'] == "Dashboard":
             else:
                 st.button("VALIDER SALLE (+50 XP)", on_click=save_xp, args=(50, "Force", "Salle"))
 
+# ==============================================================================
+# DONJON
+# ==============================================================================
 elif st.session_state['current_page'] == "Donjon":
     st.markdown('<div class="section-header">⚔️ LES PROFONDEURS DU DONJON</div>', unsafe_allow_html=True)
     with st.expander("➕ INVOQUER UN BOSS"):
@@ -327,7 +320,6 @@ elif st.session_state['current_page'] == "Donjon":
         df_b = pd.DataFrame(get_db().worksheet("Bosses").get_all_records())
         for _, b in df_b.iterrows():
             pv = b['PV_Restants']
-            # Calcul du compte à rebours sécurisé
             try: days = (pd.to_datetime(b['Date']).date() - datetime.now().date()).days
             except: days = "?"
             
@@ -356,18 +348,18 @@ elif st.session_state['current_page'] == "Donjon":
 
 elif st.session_state['current_page'] == "Histoire":
     st.markdown('<div class="section-header">📜 JOURNAL DE BORD</div>', unsafe_allow_html=True)
-    if not df_full.empty:
-        for _, r in df_full.iloc[::-1].head(15).iterrows():
+    if not df_raw.empty:
+        for _, r in df_raw.iloc[::-1].head(15).iterrows():
             st.markdown(f'<div class="history-card"><b>{r["Date"]}</b> | {r["Type"]} | <b>+{r["XP"]} XP</b><br>{r["Commentaire"]}</div>', unsafe_allow_html=True)
 
 elif st.session_state['current_page'] == "HautsFaits":
     st.markdown('<div class="section-header">🏆 SALLE DES HAUTS FAITS</div>', unsafe_allow_html=True)
-    if df_full.empty: st.write("Aucun exploit.")
+    if df_raw.empty: st.write("Aucun exploit.")
     else:
         h1, h2, h3 = st.columns(3)
         with h1: 
             if lvl >= 2: st.markdown('<div class="achievement-card">🎖️<br><b>NOVICE</b><br><small>Niv. 2 atteint</small></div>', unsafe_allow_html=True)
         with h2:
-            if any(df_full['Commentaire'].str.contains("LOYER", na=False)): st.markdown('<div class="achievement-card">💰<br><b>LOYAL</b><br><small>Loyer payé</small></div>', unsafe_allow_html=True)
+            if any(df_raw['Commentaire'].str.contains("LOYER", na=False)): st.markdown('<div class="achievement-card">💰<br><b>LOYAL</b><br><small>Loyer payé</small></div>', unsafe_allow_html=True)
         with h3:
-            if len(df_full[df_full['Commentaire'].str.contains("Anki", na=False)]) >= 10: st.markdown('<div class="achievement-card">🔥<br><b>ASSIDU</b><br><small>10 sessions Anki</small></div>', unsafe_allow_html=True)
+            if len(df_raw[df_raw['Commentaire'].str.contains("Anki", na=False)]) >= 10: st.markdown('<div class="achievement-card">🔥<br><b>ASSIDU</b><br><small>10 sessions Anki</small></div>', unsafe_allow_html=True)
