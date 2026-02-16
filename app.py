@@ -25,35 +25,29 @@ components.html(
     </script>""", height=0
 )
 
-# --- CSS (V56 - STABLE) ---
+# --- CSS ---
 st.markdown("""
     <style>
     header { display: none !important; }
     [data-testid="stHeader"] { display: none !important; }
     .block-container { padding-top: 1rem !important; margin-top: -2rem !important; }
     .stApp { background-color: #f4f6f9; color: #333; }
-
     .bar-label { font-weight: 700; font-size: 0.8em; color: #555; margin-bottom: 5px; display: flex; justify-content: space-between; }
     .bar-container { background-color: #e9ecef; border-radius: 8px; width: 100%; height: 16px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); overflow: hidden; }
     .bar-fill { height: 100%; border-radius: 8px; transition: width 0.6s ease-in-out; }
     .xp-fill { background: linear-gradient(90deg, #8A2BE2, #9e47ff); }
     .mana-fill { background: linear-gradient(90deg, #0056b3, #007bff); }
     .chaos-fill { background: linear-gradient(90deg, #800000, #a71d2a); }
-
     .boss-hp-container { background-color: #222; border: 3px solid #000; height: 35px; border-radius: 5px; overflow: hidden; margin: 10px 0 20px 0; position: relative; }
     .boss-hp-fill { background: linear-gradient(90deg, #ff0000, #990000); height: 100%; transition: width 1s ease-out; }
     .boss-hp-text { position: absolute; width: 100%; text-align: center; color: #fff; font-weight: 900; line-height: 35px; text-transform: uppercase; text-shadow: 2px 2px 4px #000; }
-
     .section-header { font-size: 1.1em; font-weight: 800; text-transform: uppercase; color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; margin-bottom: 15px; margin-top: 20px; }
     .stButton>button { width: 100%; min-height: 40px; border: 1px solid #bbb; border-radius: 6px; background-color: white; color: #333; font-weight: 600; text-transform: uppercase; font-size: 0.85em; }
     .stButton>button:hover { border-color: #333; background-color: #333; color: white; }
-    
     .buff-badge { display: inline-block; background: #e3f2fd; color: #0d47a1; padding: 2px 8px; border-radius: 12px; font-size: 0.75em; font-weight: bold; margin-right: 5px; border: 1px solid #90caf9; }
     .streak-fire { font-size: 1.2em; font-weight: bold; color: #ff5722; text-shadow: 0 0 5px rgba(255, 87, 34, 0.4); }
-
     .atk-btn > div > button { background: linear-gradient(135deg, #ffffff, #f0f0f0) !important; color: #444 !important; border: 1px solid #ccc !important; text-transform: none !important; }
     .atk-btn > div > button:hover { background: #333 !important; color: #fff !important; transform: scale(1.02); }
-
     @media (max-width: 768px) {
         .bar-label { font-size: 0.65em; }
         .bar-container { height: 12px; }
@@ -66,7 +60,21 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# --- GLOBAL VARS INIT (ANTI-CRASH) ---
+# Ces variables existent TOUJOURS, même si Google plante.
+total_xp = 0
+lvl = 1
+xp_in_level = 0
+xp_req_level = 100
+current_streak = 0
+mana = 100
+chaos = 0
+rent_paid = False
+salt_paid = False
+df_raw = pd.DataFrame()
+
 # --- ENGINE ---
+@st.cache_resource(ttl=600) # Garde la connexion en cache 10 minutes
 def get_db():
     secrets = st.secrets["connections"]["gsheets"]
     creds = Credentials.from_service_account_info(secrets, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
@@ -86,11 +94,23 @@ def calculate_streak(df):
         df['D'] = pd.to_datetime(df['Date']).dt.date
         dates = sorted(df['D'].unique(), reverse=True)
         today = datetime.now().date()
-        if not dates or (dates[0] != today and dates[0] != today - timedelta(days=1)): return 0
-        streak, check = 0, dates[0]
+        if not dates: return 0
+        
+        # Check today or yesterday
+        if dates[0] == today:
+            check = today
+        elif dates[0] == today - timedelta(days=1):
+            check = today - timedelta(days=1)
+        else:
+            return 0
+            
+        streak = 0
         for d in dates:
-            if d == check: streak += 1; check -= timedelta(days=1)
-            else: break
+            if d == check: 
+                streak += 1
+                check -= timedelta(days=1)
+            else: 
+                break
         return streak
     except: return 0
 
@@ -100,12 +120,19 @@ def save_xp(amt, type_s, cmt=""):
         df = pd.DataFrame(db.get_all_records())
         xp = int(pd.to_numeric(df["XP"], errors='coerce').sum()) if not df.empty else 0
         lvl, _, _ = get_level_data(xp)
-        if lvl >= 5 and type_s == "Intellect": amt = int(amt * 1.1)
-        if lvl >= 20 and type_s == "Force": amt = int(amt * 1.2)
-        db.append_row([datetime.now().strftime("%Y-%m-%d %H:%M"), type_s, amt, cmt])
-        st.toast(f"⚔️ +{amt} XP")
-        if get_level_data(xp + amt)[0] > lvl: st.balloons()
-    except: pass
+        
+        # Buffs calculation
+        final_amt = amt
+        if lvl >= 5 and type_s == "Intellect": final_amt = int(amt * 1.1)
+        if lvl >= 20 and type_s == "Force": final_amt = int(amt * 1.2)
+        
+        db.append_row([datetime.now().strftime("%Y-%m-%d %H:%M"), type_s, final_amt, cmt])
+        st.toast(f"⚔️ +{final_amt} XP")
+        
+        # Balloon check
+        if get_level_data(xp + final_amt)[0] > lvl: st.balloons()
+    except Exception as e:
+        st.error(f"Erreur de sauvegarde: {e}")
 
 def load_tasks_v2(col_idx):
     try:
@@ -121,12 +148,14 @@ def del_task(t, col_idx):
     except: pass
 
 def attack_boss(b_name, chap, dmg):
-    db = get_db()
-    ws_t = db.worksheet("Boss_Tasks"); cell = ws_t.find(chap)
-    if cell: ws_t.delete_rows(cell.row)
-    ws_b = db.worksheet("Bosses"); b_cell = ws_b.find(b_name)
-    pv = max(0, float(ws_b.cell(b_cell.row, 4).value) - dmg)
-    ws_b.update_cell(b_cell.row, 4, pv)
+    try:
+        db = get_db()
+        ws_t = db.worksheet("Boss_Tasks"); cell = ws_t.find(chap)
+        if cell: ws_t.delete_rows(cell.row)
+        ws_b = db.worksheet("Bosses"); b_cell = ws_b.find(b_name)
+        pv = max(0, float(ws_b.cell(b_cell.row, 4).value) - dmg)
+        ws_b.update_cell(b_cell.row, 4, pv)
+    except: pass
 
 def create_cal_link(title):
     base = "https://www.google.com/calendar/render?action=TEMPLATE"
@@ -134,41 +163,29 @@ def create_cal_link(title):
     end = (datetime.now() + timedelta(days=1)).replace(hour=11, minute=0, second=0).strftime('%Y%m%dT%H%M00')
     return f"{base}&text={urllib.parse.quote('[RPG] '+title)}&dates={now}/{end}"
 
-# --- INITIALISATION SÉCURISÉE (SAFE LOAD) ---
-# 1. Variables par défaut pour éviter le NameError
-total_xp, lvl, xp_in_level, xp_req_level = 0, 1, 0, 100
-current_streak, mana, chaos = 0, 100, 0
-rent_paid, salt_paid = False, False
-df_raw = pd.DataFrame()
-
-# 2. Chargement des données séparé pour éviter le crash global
+# --- MAIN DATA LOAD ---
 try:
     df_raw = pd.DataFrame(get_db().worksheet("Data").get_all_records())
-except: pass # Si Google échoue, on garde df vide
-
-# 3. Calculs si données disponibles
-if not df_raw.empty:
-    try:
+    if not df_raw.empty:
         total_xp = int(pd.to_numeric(df_raw["XP"], errors='coerce').sum())
         lvl, xp_in_level, xp_req_level = get_level_data(total_xp)
         current_streak = calculate_streak(df_raw)
         
-        # Mana Logic
         loss_rate = 8 if lvl >= 10 else 10
         anki_df = df_raw[df_raw['Commentaire'].str.contains("Combat", na=False)]
         if not anki_df.empty:
             mana = max(0, 100 - ((datetime.now() - datetime.strptime(anki_df.iloc[-1]['Date'], "%Y-%m-%d %H:%M")).days * loss_rate))
         
-        # Chaos Logic
         chaos_df = df_raw[df_raw['Type'].str.contains("Gestion", na=False)]
         if not chaos_df.empty:
             chaos = min(100, (datetime.now() - datetime.strptime(chaos_df.iloc[-1]['Date'], "%Y-%m-%d %H:%M")).days * 3)
             
-        # Paiements
         cur_m = datetime.now().strftime("%Y-%m")
         rent_paid = not df_raw[df_raw['Date'].str.contains(cur_m, na=False) & df_raw['Commentaire'].str.contains("Loyer", na=False)].empty
         salt_paid = not df_raw[df_raw['Date'].str.contains(cur_m, na=False) & df_raw['Commentaire'].str.contains("Salt", na=False)].empty
-    except: pass # Si un calcul échoue, on garde les valeurs par défaut pour cette stat
+except Exception:
+    # Fail silently and keep defaults to prevent crash
+    pass
 
 # --- SESSION STATE ---
 if 'current_page' not in st.session_state: st.session_state['current_page'] = "Dashboard"
@@ -186,8 +203,8 @@ with c_main:
     if lvl >= 10: buffs += "<span class='buff-badge'>🛡️ Mémoire d'Or (-8% Decay)</span>"
     if buffs: st.markdown(buffs, unsafe_allow_html=True)
     
-    req_txt = int(xp_req_level - xp_in_level) if xp_req_level > 0 else 0
-    st.caption(f"{req_txt} XP requis pour le niveau {lvl+1}")
+    xp_missing = int(xp_req_level - xp_in_level) if xp_req_level > 0 else 0
+    st.caption(f"{xp_missing} XP requis pour le niveau {lvl+1}")
 
 with c_nav:
     n1, n2, n3, n4 = st.columns(4)
@@ -201,16 +218,17 @@ c_b1, c_b2, c_b3 = st.columns(3)
 def draw_bar(l, v, c):
     st.markdown(f'<div class="bar-label"><span>{l}</span><span>{int(v)}%</span></div><div class="bar-container"><div class="bar-fill {c}" style="width:{v}%"></div></div>', unsafe_allow_html=True)
 
-# Affichage sécurisé des barres
-xp_pct = (xp_in_level/xp_req_level)*100 if xp_req_level > 0 else 0
-with c_b1: draw_bar("EXPÉRIENCE", xp_pct, "xp-fill")
+# Safe render bars
+val_xp = (xp_in_level/xp_req_level)*100 if xp_req_level > 0 else 0
+with c_b1: draw_bar("EXPÉRIENCE", val_xp, "xp-fill")
 with c_b2: draw_bar("MÉMOIRE", mana, "mana-fill")
 with c_b3: draw_bar("CHAOS", chaos, "chaos-fill")
 st.markdown("---")
 
 # ==============================================================================
-# DASHBOARD
+# PAGES
 # ==============================================================================
+
 if st.session_state['current_page'] == "Dashboard":
     col_l, col_r = st.columns([1, 1.2], gap="large")
     
@@ -305,9 +323,6 @@ if st.session_state['current_page'] == "Dashboard":
             else:
                 st.button("VALIDER SALLE (+50 XP)", on_click=save_xp, args=(50, "Force", "Salle"))
 
-# ==============================================================================
-# DONJON
-# ==============================================================================
 elif st.session_state['current_page'] == "Donjon":
     st.markdown('<div class="section-header">⚔️ LES PROFONDEURS DU DONJON</div>', unsafe_allow_html=True)
     with st.expander("➕ INVOQUER UN BOSS"):
