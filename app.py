@@ -25,7 +25,7 @@ components.html(
     </script>""", height=0
 )
 
-# --- CSS (DESIGN RESTAURÉ) ---
+# --- CSS (DESIGN FIXÉ & PROPRE) ---
 st.markdown("""
     <style>
     header { display: none !important; }
@@ -33,7 +33,7 @@ st.markdown("""
     .block-container { padding-top: 1rem !important; margin-top: -2rem !important; }
     .stApp { background-color: #f4f6f9; color: #333; }
 
-    /* BARRES DE PROGRESSION */
+    /* BARRES */
     .bar-label { font-weight: 700; font-size: 0.8em; color: #555; margin-bottom: 5px; display: flex; justify-content: space-between; }
     .bar-container { background-color: #e9ecef; border-radius: 8px; width: 100%; height: 16px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); overflow: hidden; }
     .bar-fill { height: 100%; border-radius: 8px; transition: width 0.6s ease-in-out; }
@@ -41,29 +41,27 @@ st.markdown("""
     .mana-fill { background: linear-gradient(90deg, #0056b3, #007bff); }
     .chaos-fill { background: linear-gradient(90deg, #800000, #a71d2a); }
 
-    /* BOSS & TITRES */
+    /* BOSS */
     .boss-hp-container { background-color: #222; border: 3px solid #000; height: 35px; border-radius: 5px; overflow: hidden; margin: 10px 0 20px 0; position: relative; }
     .boss-hp-fill { background: linear-gradient(90deg, #ff0000, #990000); height: 100%; transition: width 1s ease-out; }
     .boss-hp-text { position: absolute; width: 100%; text-align: center; color: #fff; font-weight: 900; line-height: 35px; text-transform: uppercase; text-shadow: 2px 2px 4px #000; }
-    .section-header { font-size: 1.1em; font-weight: 800; text-transform: uppercase; color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; margin-bottom: 15px; margin-top: 20px; }
 
-    /* BOUTONS & UI */
+    /* UI */
+    .section-header { font-size: 1.1em; font-weight: 800; text-transform: uppercase; color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; margin-bottom: 15px; margin-top: 20px; }
     .stButton>button { width: 100%; min-height: 40px; border: 1px solid #bbb; border-radius: 6px; background-color: white; color: #333; font-weight: 600; text-transform: uppercase; font-size: 0.85em; }
     .stButton>button:hover { border-color: #333; background-color: #333; color: white; }
+    
     .buff-badge { display: inline-block; background: #e3f2fd; color: #0d47a1; padding: 2px 8px; border-radius: 12px; font-size: 0.75em; font-weight: bold; margin-right: 5px; border: 1px solid #90caf9; }
     .streak-fire { font-size: 1.2em; font-weight: bold; color: #ff5722; text-shadow: 0 0 5px rgba(255, 87, 34, 0.4); }
-    
-    /* ATTACK BUTTONS */
+
     .atk-btn > div > button { background: linear-gradient(135deg, #ffffff, #f0f0f0) !important; color: #444 !important; border: 1px solid #ccc !important; text-transform: none !important; }
     .atk-btn > div > button:hover { background: #333 !important; color: #fff !important; transform: scale(1.02); }
 
-    /* ELEMENTS SPÉCIAUX */
-    .gold-banner { background: linear-gradient(135deg, #bf953f, #fcf6ba, #b38728, #fbf5b7); color: #5c4004; padding: 15px; text-align: center; border-radius: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; border: 2px solid #d4af37; margin-bottom: 10px; }
+    .gold-banner { background: linear-gradient(135deg, #bf953f, #fcf6ba, #b38728, #fbf5b7); color: #5c4004; padding: 15px; text-align: center; border-radius: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; border: 2px solid #d4af37; margin-bottom: 15px; }
     .timer-box { font-family: 'Courier New', monospace; font-size: 2.2em; font-weight: bold; color: #d9534f; text-align: center; background-color: #fff; border: 2px solid #d9534f; border-radius: 8px; padding: 15px; margin: 10px 0; }
     .history-card { background: white; padding: 12px; border-radius: 8px; border-left: 5px solid #8A2BE2; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     .achievement-card { background: white; padding: 20px; border-radius: 12px; border: 2px solid #FFD700; text-align: center; margin-bottom: 10px; }
-    
-    /* MOBILE FIX */
+
     @media (max-width: 768px) {
         .bar-label { font-size: 0.65em; }
         .bar-container { height: 12px; }
@@ -72,21 +70,9 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- INIT VARIABLES SÉCURISÉES ---
-total_xp = 0
-lvl = 1
-xp_in_level = 0
-xp_req_level = 100
-current_streak = 0
-mana = 100
-chaos = 0
-rent_paid = False
-salt_paid = False
-df_raw = pd.DataFrame()
-
-# --- ENGINE ---
-@st.cache_resource(ttl=600)
+# --- ENGINE (NO CACHE POUR ÉVITER LES BUGS) ---
 def get_db():
+    # Suppression du cache pour forcer la connexion fraîche à chaque fois
     secrets = st.secrets["connections"]["gsheets"]
     creds = Credentials.from_service_account_info(secrets, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
     return gspread.authorize(creds).open_by_url(secrets["spreadsheet"])
@@ -137,7 +123,8 @@ def load_tasks_v2(col_idx):
 
 def del_task(t, col_idx):
     try:
-        ws = get_db().worksheet("Tasks"); cell = ws.find(t, in_column=col_idx)
+        ws = get_db().worksheet("Tasks")
+        cell = ws.find(t, in_column=col_idx)
         if cell: ws.update_cell(cell.row, col_idx, "")
     except: pass
 
@@ -157,7 +144,12 @@ def create_cal_link(title):
     end = (datetime.now() + timedelta(days=1)).replace(hour=11, minute=0, second=0).strftime('%Y%m%dT%H%M00')
     return f"{base}&text={urllib.parse.quote('[RPG] '+title)}&dates={now}/{end}"
 
-# --- CHARGEMENT DONNÉES (SAFE) ---
+# --- INITIALISATION SANS CRASH ---
+total_xp, lvl, xp_in_level, xp_req_level = 0, 1, 0, 100
+current_streak, mana, chaos = 0, 100, 0
+rent_paid, salt_paid = False, False
+df_raw = pd.DataFrame()
+
 try:
     df_raw = pd.DataFrame(get_db().worksheet("Data").get_all_records())
     if not df_raw.empty:
@@ -179,14 +171,19 @@ try:
         salt_paid = not df_raw[df_raw['Date'].str.contains(cur_m, na=False) & df_raw['Commentaire'].str.contains("Salt", na=False)].empty
 except: pass
 
+# --- SESSION ---
 if 'current_page' not in st.session_state: st.session_state['current_page'] = "Dashboard"
 if 'gym_current_prog' not in st.session_state: st.session_state['gym_current_prog'] = None
 
 # ==============================================================================
-# HEADER (NAV & STATS)
+# HEADER
 # ==============================================================================
 c_av, c_main, c_nav = st.columns([0.15, 0.60, 0.25])
-with c_av: st.image("avatar.png", width=70)
+with c_av: 
+    st.image("avatar.png", width=70)
+    # Bouton de secours pour forcer le rechargement si "0 XP"
+    if st.button("🔄", help="Forcer la synchronisation"): st.rerun()
+
 with c_main:
     st.markdown(f"<h3 style='margin:0;'>NIVEAU {lvl} | SELECTA <span class='streak-fire'>🔥 {current_streak}</span></h3>", unsafe_allow_html=True)
     buffs = ""
@@ -214,13 +211,11 @@ with c_b3: draw_bar("CHAOS", chaos, "chaos-fill")
 st.markdown("---")
 
 # ==============================================================================
-# DASHBOARD (ALIGNEMENT FIXÉ)
+# PAGES
 # ==============================================================================
 if st.session_state['current_page'] == "Dashboard":
-    # DIVISION STRICTE EN 2 COLONNES
-    col_l, col_r = st.columns([1, 1.1], gap="large")
+    col_l, col_r = st.columns([1, 1.1], gap="large") # Alignement corrigé
     
-    # --- COLONNE GAUCHE (Quêtes & Gestion) ---
     with col_l:
         st.markdown('<div class="section-header">📌 QUÊTES DU JOUR</div>', unsafe_allow_html=True)
         with st.form("t_f", clear_on_submit=True):
@@ -249,7 +244,6 @@ if st.session_state['current_page'] == "Dashboard":
         with c2: st.button("✍️ RÉPONDRE", on_click=save_xp, args=(10, "Gestion", "Réponse"))
         with c3: st.button("📅 AGENDA", on_click=save_xp, args=(10, "Gestion", "Agenda"))
 
-    # --- COLONNE DROITE (Savoir & Sport) ---
     with col_r:
         st.markdown('<div class="section-header">🧠 FORGE DU SAVOIR</div>', unsafe_allow_html=True)
         cc1, cc2 = st.columns(2)
@@ -309,9 +303,6 @@ if st.session_state['current_page'] == "Dashboard":
             else:
                 st.button("VALIDER SALLE (+50 XP)", on_click=save_xp, args=(50, "Force", "Salle"))
 
-# ==============================================================================
-# AUTRES PAGES
-# ==============================================================================
 elif st.session_state['current_page'] == "Donjon":
     st.markdown('<div class="section-header">⚔️ LES PROFONDEURS DU DONJON</div>', unsafe_allow_html=True)
     with st.expander("➕ INVOQUER UN BOSS"):
