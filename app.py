@@ -57,7 +57,60 @@ st.markdown("""
 
     .gold-banner { background: linear-gradient(135deg, #bf953f, #fcf6ba, #b38728, #fbf5b7); color: #5c4004; padding: 15px; text-align: center; border-radius: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; border: 2px solid #d4af37; margin-bottom: 15px; }
     .history-card { background: white; padding: 12px; border-radius: 8px; border-left: 5px solid #8A2BE2; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    .achievement-card { background: white; padding: 20px; border-radius: 12px; border: 2px solid #FFD700; text-align: center; margin-bottom: 10px; }
+    /* ── Hauts Faits ── */
+    .hf-stats { font-size: 0.9em; color: #666; margin-bottom: 1rem; }
+    .hf-stats strong { color: #333; font-weight: 700; }
+
+    .hf-cat-head {
+        font-size: 0.72em; font-weight: 800; letter-spacing: 0.09em;
+        text-transform: uppercase; color: #888;
+        padding-bottom: 6px; border-bottom: 1.5px solid #eee;
+        margin: 1.4rem 0 10px; display: flex; justify-content: space-between;
+    }
+    .hf-cat-count { font-weight: 400; opacity: 0.6; }
+
+    .hf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 4px; }
+
+    .hf-card {
+        padding: 12px; border-radius: 10px;
+        border: 1px solid #e8e8e8;
+        background: white; transition: box-shadow 0.2s;
+    }
+    .hf-card.unlocked { border-color: #ccc; }
+    .hf-card.locked { opacity: 0.3; }
+
+    .hf-ico {
+        width: 32px; height: 32px; border-radius: 8px;
+        display: flex; align-items: center; justify-content: center;
+        margin-bottom: 8px; font-size: 16px;
+    }
+    .hf-ico.info    { background: #e3f2fd; color: #0d47a1; }
+    .hf-ico.success { background: #e8f5e9; color: #1b5e20; }
+    .hf-ico.danger  { background: #ffebee; color: #b71c1c; }
+    .hf-ico.warning { background: #fff8e1; color: #e65100; }
+    .hf-ico.locked  { background: #f5f5f5; color: #aaa; }
+
+    .hf-name { font-size: 0.82em; font-weight: 700; color: #333; margin-bottom: 3px; }
+    .hf-desc { font-size: 0.72em; color: #888; line-height: 1.4; }
+
+    /* ── Level ring ── */
+    .lvl-ring-section {
+        display: flex; align-items: center; gap: 20px;
+        padding: 0.8rem 0 1.2rem;
+        border-bottom: 1px solid #eee; margin-bottom: 1.4rem;
+    }
+    .lvl-ring-wrap { position: relative; width: 80px; height: 80px; flex-shrink: 0; }
+    .lvl-ring-num {
+        position: absolute; inset: 0; display: flex;
+        align-items: center; justify-content: center;
+        font-size: 1.5em; font-weight: 700; color: #333;
+    }
+    .lvl-ring-meta { flex: 1; min-width: 0; }
+    .lvl-ring-label { font-size: 0.68em; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #999; margin-bottom: 2px; }
+    .lvl-ring-class { font-size: 1.25em; font-weight: 800; color: #333; margin-bottom: 8px; }
+    .lvl-ring-xpbar { height: 4px; background: #eee; border-radius: 2px; overflow: hidden; }
+    .lvl-ring-xpfill { height: 100%; border-radius: 2px; background: #8A2BE2; }
+    .lvl-ring-note { font-size: 0.72em; color: #999; margin-top: 5px; }
 
     /* Bouton Anki / Sport = gros et visible */
     .big-action > div > button {
@@ -277,6 +330,106 @@ def create_cal_link(title: str) -> str:
 
 
 # ==============================================================================
+# ACHIEVEMENTS — HELPERS & DÉFINITIONS
+# ==============================================================================
+
+def get_rpg_class(level: int) -> str:
+    """Retourne le nom de classe RPG selon le niveau."""
+    if level < 5:   return "Apprenti"
+    if level < 10:  return "Initié"
+    if level < 20:  return "Adepte"
+    if level < 35:  return "Vétéran"
+    if level < 50:  return "Maître"
+    return "Légende"
+
+
+def count_bosses_defeated(df: pd.DataFrame) -> int:
+    """Compte le nombre de boss vaincus (victoires XP)."""
+    if df.empty:
+        return 0
+    return df[df['Type'].str.contains("Victoire", na=False)].shape[0]
+
+
+def check_comeback(df: pd.DataFrame) -> bool:
+    """True si le joueur est revenu après 7+ jours d'absence."""
+    if df.empty or len(df) < 2:
+        return False
+    try:
+        dates = pd.to_datetime(df['Date'], errors='coerce').dropna().sort_values()
+        for i in range(1, len(dates)):
+            if (dates.iloc[i] - dates.iloc[i - 1]).days >= 7:
+                return True
+        return False
+    except Exception as e:
+        logger.warning(f"check_comeback failed: {e}")
+        return False
+
+
+ACHIEVEMENTS = [
+    # NIVEAU
+    {"cat": "Niveau",    "name": "Apprenti",          "desc": "Niveau 2 atteint",             "icon": "⭐", "color": "info",
+     "check": lambda l, df, s, b: l >= 2},
+    {"cat": "Niveau",    "name": "Initié",             "desc": "Niveau 5 — buff Intellect",    "icon": "⭐", "color": "info",
+     "check": lambda l, df, s, b: l >= 5},
+    {"cat": "Niveau",    "name": "Adepte",             "desc": "Niveau 10 — buff Mémoire",     "icon": "⭐", "color": "info",
+     "check": lambda l, df, s, b: l >= 10},
+    {"cat": "Niveau",    "name": "Vétéran",            "desc": "Niveau 20",                    "icon": "👑", "color": "info",
+     "check": lambda l, df, s, b: l >= 20},
+    {"cat": "Niveau",    "name": "Légende",            "desc": "Niveau 50",                    "icon": "👑", "color": "info",
+     "check": lambda l, df, s, b: l >= 50},
+
+    # INTELLECT
+    {"cat": "Intellect", "name": "Premier Souffle",    "desc": "1ère session Anki",            "icon": "📖", "color": "success",
+     "check": lambda l, df, s, b: not df.empty and df['Commentaire'].str.contains("Anki", na=False).any()},
+    {"cat": "Intellect", "name": "Assidu",             "desc": "10 sessions Anki",             "icon": "📖", "color": "success",
+     "check": lambda l, df, s, b: not df.empty and df['Commentaire'].str.contains("Anki", na=False).sum() >= 10},
+    {"cat": "Intellect", "name": "Érudit",             "desc": "30 sessions Anki",             "icon": "📖", "color": "success",
+     "check": lambda l, df, s, b: not df.empty and df['Commentaire'].str.contains("Anki", na=False).sum() >= 30},
+    {"cat": "Intellect", "name": "Sage Immortel",      "desc": "100 sessions Anki",            "icon": "📖", "color": "success",
+     "check": lambda l, df, s, b: not df.empty and df['Commentaire'].str.contains("Anki", na=False).sum() >= 100},
+
+    # FORCE
+    {"cat": "Force",     "name": "Premier Sang",       "desc": "1er workout effectué",         "icon": "⚔️", "color": "danger",
+     "check": lambda l, df, s, b: not df.empty and df['Commentaire'].str.contains("Workout", na=False).any()},
+    {"cat": "Force",     "name": "Corps d'Acier",      "desc": "10 workouts",                  "icon": "⚔️", "color": "danger",
+     "check": lambda l, df, s, b: not df.empty and df['Commentaire'].str.contains("Workout", na=False).sum() >= 10},
+    {"cat": "Force",     "name": "Guerrier",           "desc": "30 workouts",                  "icon": "🛡️", "color": "danger",
+     "check": lambda l, df, s, b: not df.empty and df['Commentaire'].str.contains("Workout", na=False).sum() >= 30},
+
+    # GESTION
+    {"cat": "Gestion",   "name": "Loyal",              "desc": "Loyer payé",                   "icon": "🏠", "color": "warning",
+     "check": lambda l, df, s, b: not df.empty and df['Commentaire'].str.contains("Loyer", na=False).any()},
+    {"cat": "Gestion",   "name": "Citoyen",            "desc": "Salt payé",                    "icon": "🏠", "color": "warning",
+     "check": lambda l, df, s, b: not df.empty and df['Commentaire'].str.contains("Salt", na=False).any()},
+    {"cat": "Gestion",   "name": "Administrateur",     "desc": "50 tâches complétées",         "icon": "📋", "color": "warning",
+     "check": lambda l, df, s, b: not df.empty and df[df['Type'] == 'Gestion'].shape[0] >= 50},
+
+    # STREAK
+    {"cat": "Streak",    "name": "Étincelle",          "desc": "3 jours consécutifs",          "icon": "🔥", "color": "warning",
+     "check": lambda l, df, s, b: s >= 3},
+    {"cat": "Streak",    "name": "Semaine de Feu",     "desc": "7 jours consécutifs",          "icon": "🔥", "color": "warning",
+     "check": lambda l, df, s, b: s >= 7},
+    {"cat": "Streak",    "name": "Mois Légendaire",    "desc": "30 jours consécutifs",         "icon": "🌙", "color": "warning",
+     "check": lambda l, df, s, b: s >= 30},
+
+    # BOSS
+    {"cat": "Boss",      "name": "Tueur de Dragons",   "desc": "1 boss vaincu",                "icon": "💀", "color": "danger",
+     "check": lambda l, df, s, b: b >= 1},
+    {"cat": "Boss",      "name": "Chasseur de Légendes","desc": "3 boss vaincus",              "icon": "💀", "color": "danger",
+     "check": lambda l, df, s, b: b >= 3},
+
+    # SECRETS
+    {"cat": "Secret",    "name": "Le Héros Revient",   "desc": "Retour après 7j d'absence",   "icon": "👁️", "color": "info",
+     "check": lambda l, df, s, b: check_comeback(df)},
+    {"cat": "Secret",    "name": "Carabin Légendaire", "desc": "Niv.10 + 30 Anki + 10 Sport", "icon": "🩺", "color": "info",
+     "check": lambda l, df, s, b: l >= 10
+         and not df.empty
+         and df['Commentaire'].str.contains("Anki", na=False).sum() >= 30
+         and df['Commentaire'].str.contains("Workout", na=False).sum() >= 10},
+]
+
+
+# ==============================================================================
 # INITIALISATION
 # ==============================================================================
 
@@ -342,8 +495,9 @@ with c_av:
         st.rerun()
 
 with c_main:
+    rpg_class = get_rpg_class(lvl)
     st.markdown(
-        f"<h3 style='margin:0;'>NIVEAU {lvl} | SELECTA "
+        f"<h3 style='margin:0;'>NV.{lvl} {rpg_class} | SELECTA "
         f"<span class='streak-fire'>🔥 {current_streak}</span></h3>",
         unsafe_allow_html=True
     )
@@ -378,6 +532,100 @@ with c_b1: draw_bar("EXPÉRIENCE", xp_pct, "xp-fill")
 with c_b2: draw_bar("MÉMOIRE", mana, "mana-fill")
 with c_b3: draw_bar("CHAOS", chaos, "chaos-fill")
 st.markdown("---")
+
+
+# ==============================================================================
+# RENDER HAUTS FAITS
+# ==============================================================================
+
+def render_hauts_faits(lvl, df_raw, current_streak):
+    """Renders the Hauts Faits page. Call inside the page routing block."""
+    import math
+
+    bosses_defeated = count_bosses_defeated(df_raw)
+
+    evaluated = []
+    for ach in ACHIEVEMENTS:
+        try:
+            unlocked = ach["check"](lvl, df_raw, current_streak, bosses_defeated)
+        except Exception as e:
+            logger.warning(f"Achievement check failed for {ach['name']}: {e}")
+            unlocked = False
+        evaluated.append({**ach, "unlocked": unlocked})
+
+    total      = len(evaluated)
+    n_unlocked = sum(1 for a in evaluated if a["unlocked"])
+
+    # ── Level ring ──────────────────────────────────────────────
+    rpg_class   = get_rpg_class(lvl)
+    xp_pct_ring = (xp_in_level / xp_req_level * 100) if xp_req_level > 0 else 0
+    r, cx, cy   = 32, 40, 40
+    circumference = 2 * math.pi * r
+    dash_offset   = circumference * (1 - xp_pct_ring / 100)
+
+    ring_svg = f"""
+    <svg width="80" height="80" viewBox="0 0 80 80" style="position:absolute;top:0;left:0">
+      <circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="#eee" stroke-width="5"/>
+      <circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="#8A2BE2" stroke-width="5"
+        stroke-dasharray="{circumference:.1f}" stroke-dashoffset="{dash_offset:.1f}"
+        stroke-linecap="round" transform="rotate(-90 {cx} {cy})"/>
+    </svg>
+    """
+
+    xp_needed_next = int(xp_req_level - xp_in_level)
+
+    st.markdown(f"""
+    <div class='section-header'>🏆 SALLE DES HAUTS FAITS</div>
+    <div class='hf-stats'><strong>{n_unlocked}/{total}</strong> hauts faits débloqués</div>
+
+    <div class='lvl-ring-section'>
+      <div class='lvl-ring-wrap'>
+        {ring_svg}
+        <div class='lvl-ring-num'>{lvl}</div>
+      </div>
+      <div class='lvl-ring-meta'>
+        <div class='lvl-ring-label'>Classe actuelle</div>
+        <div class='lvl-ring-class'>{rpg_class}</div>
+        <div class='lvl-ring-xpbar'>
+          <div class='lvl-ring-xpfill' style='width:{xp_pct_ring:.1f}%'></div>
+        </div>
+        <div class='lvl-ring-note'>{xp_needed_next} XP avant Niveau {lvl + 1}</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Achievement grid par catégorie ──────────────────────────
+    categories = []
+    seen = set()
+    for a in evaluated:
+        if a["cat"] not in seen:
+            categories.append(a["cat"])
+            seen.add(a["cat"])
+
+    for cat in categories:
+        cat_achs   = [a for a in evaluated if a["cat"] == cat]
+        cat_unlock = sum(1 for a in cat_achs if a["unlocked"])
+
+        st.markdown(
+            f'<div class="hf-cat-head">{cat}'
+            f'<span class="hf-cat-count">{cat_unlock}/{len(cat_achs)}</span></div>',
+            unsafe_allow_html=True
+        )
+
+        chunk_size = 4
+        for i in range(0, len(cat_achs), chunk_size):
+            chunk = cat_achs[i:i + chunk_size]
+            cols  = st.columns(len(chunk))
+            for col, ach in zip(cols, chunk):
+                state     = "unlocked" if ach["unlocked"] else "locked"
+                ico_class = ach["color"] if ach["unlocked"] else "locked"
+                col.markdown(f"""
+                <div class='hf-card {state}'>
+                  <div class='hf-ico {ico_class}'>{ach['icon']}</div>
+                  <div class='hf-name'>{ach['name']}</div>
+                  <div class='hf-desc'>{ach['desc']}</div>
+                </div>
+                """, unsafe_allow_html=True)
 
 
 # ==============================================================================
@@ -587,17 +835,4 @@ elif st.session_state['current_page'] == "Histoire":
         st.info("Aucune entrée dans le journal.")
 
 elif st.session_state['current_page'] == "HautsFaits":
-    st.markdown('<div class="section-header">🏆 SALLE DES HAUTS FAITS</div>', unsafe_allow_html=True)
-    if df_raw.empty:
-        st.write("Aucun exploit.")
-    else:
-        h1, h2, h3 = st.columns(3)
-        with h1:
-            if lvl >= 2:
-                st.markdown('<div class="achievement-card">🎖️<br><b>NOVICE</b><br><small>Niv. 2 atteint</small></div>', unsafe_allow_html=True)
-        with h2:
-            if df_raw['Commentaire'].str.contains("LOYER", na=False).any():
-                st.markdown('<div class="achievement-card">💰<br><b>LOYAL</b><br><small>Loyer payé</small></div>', unsafe_allow_html=True)
-        with h3:
-            if df_raw['Commentaire'].str.contains("Anki", na=False).sum() >= 10:
-                st.markdown('<div class="achievement-card">🔥<br><b>ASSIDU</b><br><small>10 sessions Anki</small></div>', unsafe_allow_html=True)
+    render_hauts_faits(lvl, df_raw, current_streak)
