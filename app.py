@@ -559,19 +559,6 @@ def render_hauts_faits(lvl, df_raw, current_streak):
     # ── Level ring ──────────────────────────────────────────────
     rpg_class   = get_rpg_class(lvl)
     xp_pct_ring = (xp_in_level / xp_req_level * 100) if xp_req_level > 0 else 0
-    r, cx, cy   = 32, 40, 40
-    circumference = 2 * math.pi * r
-    dash_offset   = circumference * (1 - xp_pct_ring / 100)
-
-    ring_svg = f"""
-    <svg width="80" height="80" viewBox="0 0 80 80" style="position:absolute;top:0;left:0">
-      <circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="#eee" stroke-width="5"/>
-      <circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="#8A2BE2" stroke-width="5"
-        stroke-dasharray="{circumference:.1f}" stroke-dashoffset="{dash_offset:.1f}"
-        stroke-linecap="round" transform="rotate(-90 {cx} {cy})"/>
-    </svg>
-    """
-
     xp_needed_next = int(xp_req_level - xp_in_level)
 
     st.markdown(f"""
@@ -579,9 +566,12 @@ def render_hauts_faits(lvl, df_raw, current_streak):
     <div class='hf-stats'><strong>{n_unlocked}/{total}</strong> hauts faits débloqués</div>
 
     <div class='lvl-ring-section'>
-      <div class='lvl-ring-wrap'>
-        {ring_svg}
-        <div class='lvl-ring-num'>{lvl}</div>
+      <div style="width:80px;height:80px;border-radius:50%;
+                  background:conic-gradient(#8A2BE2 {xp_pct_ring:.1f}%, #eee 0);
+                  display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <div style="width:62px;height:62px;border-radius:50%;background:white;
+                    display:flex;align-items:center;justify-content:center;
+                    font-size:1.4em;font-weight:700;color:#333;">{lvl}</div>
       </div>
       <div class='lvl-ring-meta'>
         <div class='lvl-ring-label'>Classe actuelle</div>
