@@ -1,12 +1,16 @@
 import streamlit as st
 import pandas as pd
 import gspread
-import time
 import random
 import streamlit.components.v1 as components
 import urllib.parse
+import logging
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
+
+# --- LOGGING ---
+logging.basicConfig(level=logging.WARNING)
+logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Selecta RPG", page_icon="🛡️", layout="wide")
@@ -25,7 +29,7 @@ components.html(
     </script>""", height=0
 )
 
-# --- CSS (DESIGN FIXÉ & PROPRE) ---
+# --- CSS ---
 st.markdown("""
     <style>
     header { display: none !important; }
@@ -33,7 +37,6 @@ st.markdown("""
     .block-container { padding-top: 1rem !important; margin-top: -2rem !important; }
     .stApp { background-color: #f4f6f9; color: #333; }
 
-    /* BARRES */
     .bar-label { font-weight: 700; font-size: 0.8em; color: #555; margin-bottom: 5px; display: flex; justify-content: space-between; }
     .bar-container { background-color: #e9ecef; border-radius: 8px; width: 100%; height: 16px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); overflow: hidden; }
     .bar-fill { height: 100%; border-radius: 8px; transition: width 0.6s ease-in-out; }
@@ -41,16 +44,14 @@ st.markdown("""
     .mana-fill { background: linear-gradient(90deg, #0056b3, #007bff); }
     .chaos-fill { background: linear-gradient(90deg, #800000, #a71d2a); }
 
-    /* BOSS */
     .boss-hp-container { background-color: #222; border: 3px solid #000; height: 35px; border-radius: 5px; overflow: hidden; margin: 10px 0 20px 0; position: relative; }
     .boss-hp-fill { background: linear-gradient(90deg, #ff0000, #990000); height: 100%; transition: width 1s ease-out; }
     .boss-hp-text { position: absolute; width: 100%; text-align: center; color: #fff; font-weight: 900; line-height: 35px; text-transform: uppercase; text-shadow: 2px 2px 4px #000; }
 
-    /* UI */
     .section-header { font-size: 1.1em; font-weight: 800; text-transform: uppercase; color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; margin-bottom: 15px; margin-top: 20px; }
     .stButton>button { width: 100%; min-height: 40px; border: 1px solid #bbb; border-radius: 6px; background-color: white; color: #333; font-weight: 600; text-transform: uppercase; font-size: 0.85em; }
     .stButton>button:hover { border-color: #333; background-color: #333; color: white; }
-    
+
     .buff-badge { display: inline-block; background: #e3f2fd; color: #0d47a1; padding: 2px 8px; border-radius: 12px; font-size: 0.75em; font-weight: bold; margin-right: 5px; border: 1px solid #90caf9; }
     .streak-fire { font-size: 1.2em; font-weight: bold; color: #ff5722; text-shadow: 0 0 5px rgba(255, 87, 34, 0.4); }
 
@@ -70,14 +71,45 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- ENGINE (NO CACHE POUR ÉVITER LES BUGS) ---
-def get_db():
-    # Suppression du cache pour forcer la connexion fraîche à chaque fois
-    secrets = st.secrets["connections"]["gsheets"]
-    creds = Credentials.from_service_account_info(secrets, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
-    return gspread.authorize(creds).open_by_url(secrets["spreadsheet"])
 
-def get_level_data(total_xp):
+# ==============================================================================
+# ENGINE — CONNEXION CACHÉE
+# ==============================================================================
+
+@st.cache_resource(ttl=300)
+def get_gspread_client():
+    """Connexion Google réutilisée pendant 5 min. Une seule auth par session."""
+    secrets = st.secrets["connections"]["gsheets"]
+    creds = Credentials.from_service_account_info(
+        secrets,
+        scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    )
+    return gspread.authorize(creds), secrets["spreadsheet"]
+
+def get_db():
+    """Ouvre le spreadsheet (client déjà caché)."""
+    client, url = get_gspread_client()
+    return client.open_by_url(url)
+
+@st.cache_data(ttl=30)
+def load_sheet_data(sheet_name: str) -> pd.DataFrame:
+    """Lecture cachée 30 sec pour éviter les appels répétés à chaque rerun."""
+    try:
+        return pd.DataFrame(get_db().worksheet(sheet_name).get_all_records())
+    except Exception as e:
+        logger.warning(f"load_sheet_data({sheet_name}) failed: {e}")
+        return pd.DataFrame()
+
+def invalidate_cache():
+    """Vide le cache de données après une écriture."""
+    load_sheet_data.clear()
+
+
+# ==============================================================================
+# HELPERS
+# ==============================================================================
+
+def get_level_data(total_xp: int):
     level, xp_needed = 1, 100
     while total_xp >= xp_needed:
         total_xp -= xp_needed
@@ -85,112 +117,232 @@ def get_level_data(total_xp):
         xp_needed = 100 * level
     return level, total_xp, xp_needed
 
-def calculate_streak(df):
-    if df.empty: return 0
+def calculate_streak(df: pd.DataFrame) -> int:
+    if df.empty:
+        return 0
     try:
-        df['D'] = pd.to_datetime(df['Date']).dt.date
-        dates = sorted(df['D'].unique(), reverse=True)
+        dates = (
+            pd.to_datetime(df['Date'], errors='coerce')
+            .dropna()
+            .dt.date
+            .unique()
+        )
+        dates = sorted(dates, reverse=True)
         today = datetime.now().date()
-        if not dates: return 0
-        if dates[0] == today: check = today
-        elif dates[0] == today - timedelta(days=1): check = today - timedelta(days=1)
-        else: return 0
+        if not dates:
+            return 0
+        if dates[0] == today:
+            check = today
+        elif dates[0] == today - timedelta(days=1):
+            check = today - timedelta(days=1)
+        else:
+            return 0
         streak = 0
         for d in dates:
-            if d == check: streak += 1; check -= timedelta(days=1)
-            else: break
+            if d == check:
+                streak += 1
+                check -= timedelta(days=1)
+            else:
+                break
         return streak
-    except: return 0
+    except Exception as e:
+        logger.warning(f"calculate_streak failed: {e}")
+        return 0
 
-def save_xp(amt, type_s, cmt=""):
+def parse_last_date(df: pd.DataFrame, mask) -> datetime | None:
+    """Retourne le dernier datetime d'un sous-df filtré, None si vide/invalide."""
     try:
-        db = get_db().worksheet("Data")
-        df = pd.DataFrame(db.get_all_records())
+        sub = df[mask]
+        if sub.empty:
+            return None
+        last = pd.to_datetime(sub.iloc[-1]['Date'], errors='coerce')
+        return last if not pd.isnull(last) else None
+    except Exception as e:
+        logger.warning(f"parse_last_date failed: {e}")
+        return None
+
+def save_xp(amt: int, type_s: str, cmt: str = ""):
+    try:
+        df = load_sheet_data("Data")
         xp = int(pd.to_numeric(df["XP"], errors='coerce').sum()) if not df.empty else 0
         lvl, _, _ = get_level_data(xp)
-        if lvl >= 5 and type_s == "Intellect": amt = int(amt * 1.1)
-        if lvl >= 20 and type_s == "Force": amt = int(amt * 1.2)
-        db.append_row([datetime.now().strftime("%Y-%m-%d %H:%M"), type_s, amt, cmt])
+        if lvl >= 5 and type_s == "Intellect":
+            amt = int(amt * 1.1)
+        if lvl >= 20 and type_s == "Force":
+            amt = int(amt * 1.2)
+        get_db().worksheet("Data").append_row(
+            [datetime.now().strftime("%Y-%m-%d %H:%M"), type_s, amt, cmt]
+        )
+        invalidate_cache()
         st.toast(f"⚔️ +{amt} XP")
-        if get_level_data(xp + amt)[0] > lvl: st.balloons()
-    except: pass
+        if get_level_data(xp + amt)[0] > lvl:
+            st.balloons()
+    except Exception as e:
+        st.error(f"Erreur sauvegarde XP : {e}")
+        logger.error(f"save_xp failed: {e}")
 
-def load_tasks_v2(col_idx):
+def load_tasks_v2(col_idx: int) -> list[str]:
     try:
         data = get_db().worksheet("Tasks").get_all_values()
-        return [row[col_idx-1] for row in data[1:] if len(row) >= col_idx and row[col_idx-1].strip() != ""]
-    except: return []
+        return [
+            row[col_idx - 1]
+            for row in data[1:]
+            if len(row) >= col_idx and row[col_idx - 1].strip()
+        ]
+    except Exception as e:
+        logger.warning(f"load_tasks_v2({col_idx}) failed: {e}")
+        return []
 
-def del_task(t, col_idx):
+def del_task(t: str, col_idx: int):
     try:
         ws = get_db().worksheet("Tasks")
         cell = ws.find(t, in_column=col_idx)
-        if cell: ws.update_cell(cell.row, col_idx, "")
-    except: pass
+        if cell:
+            ws.update_cell(cell.row, col_idx, "")
+        invalidate_cache()
+    except Exception as e:
+        st.error(f"Erreur suppression tâche : {e}")
+        logger.error(f"del_task failed: {e}")
 
-def attack_boss(b_name, chap, dmg):
+def attack_boss(b_name: str, chap: str, dmg: float):
     try:
         db = get_db()
-        ws_t = db.worksheet("Boss_Tasks"); cell = ws_t.find(chap)
-        if cell: ws_t.delete_rows(cell.row)
-        ws_b = db.worksheet("Bosses"); b_cell = ws_b.find(b_name)
+        ws_t = db.worksheet("Boss_Tasks")
+        cell = ws_t.find(chap)
+        if cell:
+            ws_t.delete_rows(cell.row)
+        ws_b = db.worksheet("Bosses")
+        b_cell = ws_b.find(b_name)
         pv = max(0, float(ws_b.cell(b_cell.row, 4).value) - dmg)
         ws_b.update_cell(b_cell.row, 4, pv)
-    except: pass
+        invalidate_cache()
+    except Exception as e:
+        st.error(f"Erreur attaque boss : {e}")
+        logger.error(f"attack_boss failed: {e}")
 
-def create_cal_link(title):
+def create_cal_link(title: str) -> str:
     base = "https://www.google.com/calendar/render?action=TEMPLATE"
     now = (datetime.now() + timedelta(days=1)).replace(hour=10, minute=0, second=0).strftime('%Y%m%dT%H%M00')
     end = (datetime.now() + timedelta(days=1)).replace(hour=11, minute=0, second=0).strftime('%Y%m%dT%H%M00')
-    return f"{base}&text={urllib.parse.quote('[RPG] '+title)}&dates={now}/{end}"
+    return f"{base}&text={urllib.parse.quote('[RPG] ' + title)}&dates={now}/{end}"
 
-# --- INITIALISATION SANS CRASH ---
+def js_timer(seconds: int = 1200):
+    """Timer JavaScript non-bloquant — ne freeze plus l'UI."""
+    components.html(f"""
+    <style>
+        .js-timer {{
+            font-family: 'Courier New', monospace;
+            font-size: 2.2em;
+            font-weight: bold;
+            color: #d9534f;
+            text-align: center;
+            background: #fff;
+            border: 2px solid #d9534f;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+        }}
+        .js-timer.done {{ color: #28a745; border-color: #28a745; }}
+    </style>
+    <div class="js-timer" id="t">--:--</div>
+    <script>
+        let s = {seconds};
+        const el = document.getElementById('t');
+        const tick = () => {{
+            if (s <= 0) {{
+                el.textContent = '✅ TERMINÉ';
+                el.classList.add('done');
+                return;
+            }}
+            const m = Math.floor(s / 60);
+            const sc = s % 60;
+            el.textContent = String(m).padStart(2,'0') + ':' + String(sc).padStart(2,'0');
+            s--;
+            setTimeout(tick, 1000);
+        }};
+        tick();
+    </script>
+    """, height=100)
+
+
+# ==============================================================================
+# INITIALISATION
+# ==============================================================================
+
 total_xp, lvl, xp_in_level, xp_req_level = 0, 1, 0, 100
 current_streak, mana, chaos = 0, 100, 0
 rent_paid, salt_paid = False, False
 df_raw = pd.DataFrame()
 
 try:
-    df_raw = pd.DataFrame(get_db().worksheet("Data").get_all_records())
+    df_raw = load_sheet_data("Data")
     if not df_raw.empty:
-        total_xp = int(pd.to_numeric(df_raw["XP"], errors='coerce').sum())
+        total_xp = int(pd.to_numeric(df_raw["XP"], errors='coerce').fillna(0).sum())
         lvl, xp_in_level, xp_req_level = get_level_data(total_xp)
         current_streak = calculate_streak(df_raw)
-        
-        loss = 8 if lvl >= 10 else 10
-        anki_df = df_raw[df_raw['Commentaire'].str.contains("Combat", na=False)]
-        if not anki_df.empty:
-            mana = max(0, 100 - ((datetime.now() - datetime.strptime(anki_df.iloc[-1]['Date'], "%Y-%m-%d %H:%M")).days * loss))
-        
-        chaos_df = df_raw[df_raw['Type'].str.contains("Gestion", na=False)]
-        if not chaos_df.empty:
-            chaos = min(100, (datetime.now() - datetime.strptime(chaos_df.iloc[-1]['Date'], "%Y-%m-%d %H:%M")).days * 3)
-            
-        cur_m = datetime.now().strftime("%Y-%m")
-        rent_paid = not df_raw[df_raw['Date'].str.contains(cur_m, na=False) & df_raw['Commentaire'].str.contains("Loyer", na=False)].empty
-        salt_paid = not df_raw[df_raw['Date'].str.contains(cur_m, na=False) & df_raw['Commentaire'].str.contains("Salt", na=False)].empty
-except: pass
 
-# --- SESSION ---
-if 'current_page' not in st.session_state: st.session_state['current_page'] = "Dashboard"
-if 'gym_current_prog' not in st.session_state: st.session_state['gym_current_prog'] = None
+        # --- MANA (decay basé sur dernier combat Anki) ---
+        loss = 8 if lvl >= 10 else 10
+        last_anki = parse_last_date(df_raw, df_raw['Commentaire'].str.contains("Combat", na=False))
+        if last_anki:
+            days_since = (datetime.now() - last_anki).days
+            mana = max(0, 100 - days_since * loss)
+        else:
+            mana = 0
+
+        # --- CHAOS (decay basé sur dernière gestion) ---
+        last_gestion = parse_last_date(df_raw, df_raw['Type'].str.contains("Gestion", na=False))
+        if last_gestion:
+            days_since = (datetime.now() - last_gestion).days
+            chaos = min(100, days_since * 3)
+        else:
+            chaos = 100
+
+        # --- LOYER / SALT ---
+        cur_m = datetime.now().strftime("%Y-%m")
+        month_mask = df_raw['Date'].str.contains(cur_m, na=False)
+        rent_paid = not df_raw[month_mask & df_raw['Commentaire'].str.contains("Loyer", na=False)].empty
+        salt_paid = not df_raw[month_mask & df_raw['Commentaire'].str.contains("Salt", na=False)].empty
+
+except Exception as e:
+    st.warning(f"⚠️ Chargement des données échoué : {e}")
+    logger.error(f"Init failed: {e}")
+
+# --- SESSION STATE ---
+if 'current_page' not in st.session_state:
+    st.session_state['current_page'] = "Dashboard"
+if 'gym_current_prog' not in st.session_state:
+    st.session_state['gym_current_prog'] = None
+if 'timer_active' not in st.session_state:
+    st.session_state['timer_active'] = False
+
 
 # ==============================================================================
 # HEADER
 # ==============================================================================
+
 c_av, c_main, c_nav = st.columns([0.15, 0.60, 0.25])
-with c_av: 
+
+with c_av:
     st.image("avatar.png", width=70)
-    # Bouton de secours pour forcer le rechargement si "0 XP"
-    if st.button("🔄", help="Forcer la synchronisation"): st.rerun()
+    if st.button("🔄", help="Forcer la synchronisation"):
+        invalidate_cache()
+        st.rerun()
 
 with c_main:
-    st.markdown(f"<h3 style='margin:0;'>NIVEAU {lvl} | SELECTA <span class='streak-fire'>🔥 {current_streak}</span></h3>", unsafe_allow_html=True)
+    st.markdown(
+        f"<h3 style='margin:0;'>NIVEAU {lvl} | SELECTA "
+        f"<span class='streak-fire'>🔥 {current_streak}</span></h3>",
+        unsafe_allow_html=True
+    )
     buffs = ""
-    if lvl >= 5: buffs += "<span class='buff-badge'>🧠 Érudit (+10% Intellect)</span>"
-    if lvl >= 10: buffs += "<span class='buff-badge'>🛡️ Mémoire d'Or (-8% Decay)</span>"
-    if buffs: st.markdown(buffs, unsafe_allow_html=True)
-    st.caption(f"{int(xp_req_level - xp_in_level)} XP requis pour le niveau {lvl+1}")
+    if lvl >= 5:
+        buffs += "<span class='buff-badge'>🧠 Érudit (+10% Intellect)</span>"
+    if lvl >= 10:
+        buffs += "<span class='buff-badge'>🛡️ Mémoire d'Or (-8% Decay)</span>"
+    if buffs:
+        st.markdown(buffs, unsafe_allow_html=True)
+    st.caption(f"{int(xp_req_level - xp_in_level)} XP requis pour le niveau {lvl + 1}")
 
 with c_nav:
     n1, n2, n3, n4 = st.columns(4)
@@ -199,45 +351,61 @@ with c_nav:
     if n3.button("⚔️"): st.session_state['current_page'] = "Donjon"; st.rerun()
     if n4.button("🏠"): st.session_state['current_page'] = "Dashboard"; st.rerun()
 
-st.write("") 
-c_b1, c_b2, c_b3 = st.columns(3)
-def draw_bar(l, v, c):
-    st.markdown(f'<div class="bar-label"><span>{l}</span><span>{int(v)}%</span></div><div class="bar-container"><div class="bar-fill {c}" style="width:{v}%"></div></div>', unsafe_allow_html=True)
+st.write("")
 
-xp_pct = (xp_in_level/xp_req_level)*100 if xp_req_level > 0 else 0
+
+def draw_bar(label: str, value: float, css_class: str):
+    st.markdown(
+        f'<div class="bar-label"><span>{label}</span><span>{int(value)}%</span></div>'
+        f'<div class="bar-container"><div class="bar-fill {css_class}" style="width:{value}%"></div></div>',
+        unsafe_allow_html=True
+    )
+
+xp_pct = (xp_in_level / xp_req_level) * 100 if xp_req_level > 0 else 0
+c_b1, c_b2, c_b3 = st.columns(3)
 with c_b1: draw_bar("EXPÉRIENCE", xp_pct, "xp-fill")
 with c_b2: draw_bar("MÉMOIRE", mana, "mana-fill")
 with c_b3: draw_bar("CHAOS", chaos, "chaos-fill")
 st.markdown("---")
 
+
 # ==============================================================================
 # PAGES
 # ==============================================================================
+
 if st.session_state['current_page'] == "Dashboard":
-    col_l, col_r = st.columns([1, 1.1], gap="large") # Alignement corrigé
-    
+    col_l, col_r = st.columns([1, 1.1], gap="large")
+
     with col_l:
         st.markdown('<div class="section-header">📌 QUÊTES DU JOUR</div>', unsafe_allow_html=True)
         with st.form("t_f", clear_on_submit=True):
             nt = st.text_input("Quête...", label_visibility="collapsed")
-            if st.form_submit_button("AJOUTER"):
-                try: 
-                    ws=get_db().worksheet("Tasks"); ws.update_cell(len(ws.col_values(1))+1, 1, nt); st.rerun()
-                except: pass
-        
+            if st.form_submit_button("AJOUTER") and nt.strip():
+                try:
+                    ws = get_db().worksheet("Tasks")
+                    ws.update_cell(len(ws.col_values(1)) + 1, 1, nt)
+                    invalidate_cache()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erreur ajout tâche : {e}")
+
         for i, t in enumerate(load_tasks_v2(1)):
             cl1, cl2, cl3, cl4 = st.columns([0.65, 0.12, 0.12, 0.11])
             cl1.write(f"• {t}")
             cl2.link_button("📅", create_cal_link(t))
-            if cl3.button("✓", key=f"q_{i}"): save_xp(10, "Gestion", t); del_task(t, 1); st.rerun()
-            if cl4.button("×", key=f"d_{i}"): del_task(t, 1); st.rerun()
+            if cl3.button("✓", key=f"q_{i}"):
+                save_xp(10, "Gestion", t); del_task(t, 1); st.rerun()
+            if cl4.button("×", key=f"d_{i}"):
+                del_task(t, 1); st.rerun()
 
         st.markdown('<div class="section-header">🛡️ GESTION DU ROYAUME</div>', unsafe_allow_html=True)
         for name, xp_v, paid, k in [("LOYER", 30, rent_paid, "r"), ("SALT", 30, salt_paid, "s")]:
-            if paid: st.markdown(f'<div class="gold-banner">✨ {name} RÉGLÉ ✨</div>', unsafe_allow_html=True)
+            if paid:
+                st.markdown(f'<div class="gold-banner">✨ {name} RÉGLÉ ✨</div>', unsafe_allow_html=True)
             else:
-                if st.button(f"🏠 PAYER {name}", key=f"btn_{k}"): save_xp(xp_v, "Gestion", name); st.rerun()
-        
+                if st.button(f"🏠 PAYER {name}", key=f"btn_{k}"):
+                    save_xp(xp_v, "Gestion", name); st.rerun()
+
         st.write("")
         c1, c2, c3 = st.columns(3)
         with c1: st.button("🧹 TRIER", on_click=save_xp, args=(10, "Gestion", "Tri"))
@@ -247,41 +415,63 @@ if st.session_state['current_page'] == "Dashboard":
     with col_r:
         st.markdown('<div class="section-header">🧠 FORGE DU SAVOIR</div>', unsafe_allow_html=True)
         cc1, cc2 = st.columns(2)
+
         with cc1:
             st.caption("📜 **GRIMOIRE**")
             with st.expander("📥 IMPORTER"):
                 up = st.file_uploader(".txt", type="txt", key="gup")
                 if up and st.button("GO"):
-                    ls = [l.strip() for l in up.getvalue().decode().splitlines() if l.strip()]
-                    if ls: 
-                        ws = get_db().worksheet("Tasks"); start = len(ws.col_values(2)) + 1
-                        cells = ws.range(start, 2, start + len(ls) - 1, 2)
-                        for i, c in enumerate(cells): c.value = ls[i]
-                        ws.update_cells(cells); st.rerun()
-            
+                    try:
+                        ls = [l.strip() for l in up.getvalue().decode().splitlines() if l.strip()]
+                        if ls:
+                            ws = get_db().worksheet("Tasks")
+                            start = len(ws.col_values(2)) + 1
+                            cells = ws.range(start, 2, start + len(ls) - 1, 2)
+                            for idx, c in enumerate(cells):
+                                c.value = ls[idx]
+                            ws.update_cells(cells)
+                            invalidate_cache()
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Erreur import grimoire : {e}")
+
             for i, t in enumerate(load_tasks_v2(2)):
                 st.write(f"**{t}**")
-                if st.button("✓", key=f"v_{i}"): 
+                if st.button("✓", key=f"v_{i}"):
                     save_xp(30, "Intellect", t); del_task(t, 2); st.rerun()
-                    
+
         with cc2:
             st.caption("⚔️ **COMBAT**")
             if 'anki_start_time' not in st.session_state:
-                if st.button("⚔️ LANCER COMBAT", type="primary"): st.session_state['anki_start_time'] = datetime.now(); st.rerun()
+                if st.button("⚔️ LANCER COMBAT", type="primary"):
+                    st.session_state['anki_start_time'] = datetime.now()
+                    st.rerun()
             else:
+                elapsed = int((datetime.now() - st.session_state['anki_start_time']).total_seconds() // 60)
+                st.info(f"⏱ {elapsed} min en cours…")
                 if st.button("🏁 TERMINER"):
-                    m = int((datetime.now() - st.session_state['anki_start_time']).total_seconds() // 60)
-                    save_xp(max(1, m), "Intellect", "Anki"); del st.session_state['anki_start_time']; st.rerun()
+                    m = max(1, elapsed)
+                    save_xp(m, "Intellect", "Anki")
+                    del st.session_state['anki_start_time']
+                    st.rerun()
 
         st.markdown('<div class="section-header">⚡ ENTRAÎNEMENT</div>', unsafe_allow_html=True)
         cs1, cs2 = st.columns(2)
+
         with cs1:
-            if st.button("⏱️ TIMER 20 MIN"):
-                p = st.empty()
-                for s in range(1200, -1, -1):
-                    m, sc = divmod(s, 60); p.markdown(f'<div class="timer-box">{m:02d}:{sc:02d}</div>', unsafe_allow_html=True); time.sleep(1)
+            # Timer JS non-bloquant
+            if not st.session_state['timer_active']:
+                if st.button("⏱️ TIMER 20 MIN"):
+                    st.session_state['timer_active'] = True
+                    st.rerun()
+            else:
+                js_timer(1200)
+                if st.button("⏹ ARRÊTER TIMER"):
+                    st.session_state['timer_active'] = False
+                    st.rerun()
+
             st.button("VALIDER MAISON (+20 XP)", on_click=save_xp, args=(20, "Force", "Maison"))
-        
+
         with cs2:
             FULL_BODY = {
                 "FB1. STRENGTH": "SQUAT 3x5\nBENCH 3x5\nROWING 3x6\nRDL 3x8\nPLANK 3x1min",
@@ -293,13 +483,16 @@ if st.session_state['current_page'] == "Dashboard":
             if st.button("🎲 GÉNÉRER SÉANCE"):
                 st.session_state['gym_current_prog'] = random.choice(list(FULL_BODY.items()))
                 st.rerun()
-            
+
             if st.session_state['gym_current_prog']:
                 n, d = st.session_state['gym_current_prog']
                 st.info(f"**{n}**")
-                for l in d.split('\n'): st.write(f"- {l}")
+                for line in d.split('\n'):
+                    st.write(f"- {line}")
                 if st.button("VALIDER SALLE (+50 XP)"):
-                    save_xp(50, "Force", n); st.session_state['gym_current_prog'] = None; st.rerun()
+                    save_xp(50, "Force", n)
+                    st.session_state['gym_current_prog'] = None
+                    st.rerun()
             else:
                 st.button("VALIDER SALLE (+50 XP)", on_click=save_xp, args=(50, "Force", "Salle"))
 
@@ -307,52 +500,92 @@ elif st.session_state['current_page'] == "Donjon":
     st.markdown('<div class="section-header">⚔️ LES PROFONDEURS DU DONJON</div>', unsafe_allow_html=True)
     with st.expander("➕ INVOQUER UN BOSS"):
         with st.form("nb"):
-            n = st.text_input("Nom"); d = st.date_input("Date")
+            n = st.text_input("Nom")
+            d = st.date_input("Date")
             if st.form_submit_button("SCELLER"):
-                try: get_db().worksheet("Bosses").append_row([n, d.strftime("%Y-%m-%d"), 0, 100]); st.rerun()
-                except: st.error("Crée l'onglet 'Bosses' !")
+                try:
+                    get_db().worksheet("Bosses").append_row([n, d.strftime("%Y-%m-%d"), 0, 100])
+                    invalidate_cache()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Crée l'onglet 'Bosses' ! ({e})")
+
     try:
-        df_b = pd.DataFrame(get_db().worksheet("Bosses").get_all_records())
+        df_b = load_sheet_data("Bosses")
         for _, b in df_b.iterrows():
             pv = b['PV_Restants']
-            try: days = (pd.to_datetime(b['Date']).date() - datetime.now().date()).days
-            except: days = "?"
-            st.markdown(f"## 👹 {b['Nom']} <span style='font-size:0.5em;color:#d9534f;margin-left:15px;'>⏳ J-{days}</span>", unsafe_allow_html=True)
-            st.markdown(f'<div class="boss-hp-container"><div class="boss-hp-text">{int(pv)}% PV</div><div class="boss-hp-fill" style="width:{pv}%"></div></div>', unsafe_allow_html=True)
             try:
-                df_c = pd.DataFrame(get_db().worksheet("Boss_Tasks").get_all_records())
+                days = (pd.to_datetime(b['Date'], errors='coerce').date() - datetime.now().date()).days
+            except Exception:
+                days = "?"
+            st.markdown(
+                f"## 👹 {b['Nom']} "
+                f"<span style='font-size:0.5em;color:#d9534f;margin-left:15px;'>⏳ J-{days}</span>",
+                unsafe_allow_html=True
+            )
+            st.markdown(
+                f'<div class="boss-hp-container">'
+                f'<div class="boss-hp-text">{int(pv)}% PV</div>'
+                f'<div class="boss-hp-fill" style="width:{pv}%"></div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+            try:
+                df_c = load_sheet_data("Boss_Tasks")
                 df_c = df_c[df_c['Boss_Nom'] == b['Nom']]
                 if df_c.empty and pv > 0:
                     up = st.file_uploader(f"Munitions {b['Nom']}", type="txt", key=f"u{b['Nom']}")
                     if up:
                         content = [l.strip() for l in up.getvalue().decode().splitlines() if l.strip()]
-                        ws_t = get_db().worksheet("Boss_Tasks"); ws_t.append_rows([[b['Nom'], c] for c in content])
-                        ws_b = get_db().worksheet("Bosses"); row = ws_b.find(b['Nom']).row; ws_b.update_cell(row, 3, len(content)); st.rerun()
+                        ws_t = get_db().worksheet("Boss_Tasks")
+                        ws_t.append_rows([[b['Nom'], c] for c in content])
+                        ws_b = get_db().worksheet("Bosses")
+                        row = ws_b.find(b['Nom']).row
+                        ws_b.update_cell(row, 3, len(content))
+                        invalidate_cache()
+                        st.rerun()
                 elif pv > 0:
-                    dmg = 100 / b['Total_Initial']; cols = st.columns(2)
-                    for i, row in enumerate(df_c.iterrows()):
-                        with cols[i%2]:
-                            if st.button(f"🔥 {row[1]['Chapitre']}", key=f"a{b['Nom']}{i}"):
-                                attack_boss(b['Nom'], row[1]['Chapitre'], dmg); save_xp(10, "Combat Boss", b['Nom']); st.rerun()
+                    dmg = 100 / b['Total_Initial']
+                    cols = st.columns(2)
+                    for i, (_, row) in enumerate(df_c.iterrows()):
+                        with cols[i % 2]:
+                            if st.button(f"🔥 {row['Chapitre']}", key=f"a{b['Nom']}{i}"):
+                                attack_boss(b['Nom'], row['Chapitre'], dmg)
+                                save_xp(10, "Combat Boss", b['Nom'])
+                                st.rerun()
                 else:
-                    st.success("VAINCU !"); st.button("💎 TRÉSOR (+200 XP)", on_click=save_xp, args=(200, "Victoire", b['Nom']))
-            except: pass
-    except: pass
+                    st.success("VAINCU !")
+                    st.button("💎 TRÉSOR (+200 XP)", on_click=save_xp, args=(200, "Victoire", b['Nom']))
+            except Exception as e:
+                st.warning(f"Erreur chargement tâches boss : {e}")
+    except Exception as e:
+        st.error(f"Erreur chargement des bosses : {e}")
 
 elif st.session_state['current_page'] == "Histoire":
     st.markdown('<div class="section-header">📜 JOURNAL DE BORD</div>', unsafe_allow_html=True)
     if not df_raw.empty:
         for _, r in df_raw.iloc[::-1].head(15).iterrows():
-            st.markdown(f'<div class="history-card"><b>{r["Date"]}</b> | {r["Type"]} | <b>+{r["XP"]} XP</b><br>{r["Commentaire"]}</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="history-card">'
+                f'<b>{r["Date"]}</b> | {r["Type"]} | <b>+{r["XP"]} XP</b>'
+                f'<br>{r["Commentaire"]}</div>',
+                unsafe_allow_html=True
+            )
+    else:
+        st.info("Aucune entrée dans le journal.")
 
 elif st.session_state['current_page'] == "HautsFaits":
     st.markdown('<div class="section-header">🏆 SALLE DES HAUTS FAITS</div>', unsafe_allow_html=True)
-    if df_raw.empty: st.write("Aucun exploit.")
+    if df_raw.empty:
+        st.write("Aucun exploit.")
     else:
         h1, h2, h3 = st.columns(3)
-        with h1: 
-            if lvl >= 2: st.markdown('<div class="achievement-card">🎖️<br><b>NOVICE</b><br><small>Niv. 2 atteint</small></div>', unsafe_allow_html=True)
+        with h1:
+            if lvl >= 2:
+                st.markdown('<div class="achievement-card">🎖️<br><b>NOVICE</b><br><small>Niv. 2 atteint</small></div>', unsafe_allow_html=True)
         with h2:
-            if any(df_raw['Commentaire'].str.contains("LOYER", na=False)): st.markdown('<div class="achievement-card">💰<br><b>LOYAL</b><br><small>Loyer payé</small></div>', unsafe_allow_html=True)
+            if df_raw['Commentaire'].str.contains("LOYER", na=False).any():
+                st.markdown('<div class="achievement-card">💰<br><b>LOYAL</b><br><small>Loyer payé</small></div>', unsafe_allow_html=True)
         with h3:
-            if len(df_raw[df_raw['Commentaire'].str.contains("Anki", na=False)]) >= 10: st.markdown('<div class="achievement-card">🔥<br><b>ASSIDU</b><br><small>10 sessions Anki</small></div>', unsafe_allow_html=True)
+            if df_raw['Commentaire'].str.contains("Anki", na=False).sum() >= 10:
+                st.markdown('<div class="achievement-card">🔥<br><b>ASSIDU</b><br><small>10 sessions Anki</small></div>', unsafe_allow_html=True)
